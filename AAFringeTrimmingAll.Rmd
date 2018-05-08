@@ -1,0 +1,354 @@
+---
+title: "Fringe-Trimming"
+author: "Stephanie Wu"
+date: "March 28, 2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(fig.width=8, fig.height=8)
+source("C:/Users/Swu2/Documents/AADiversityIndices.R")
+library(dplyr)
+library(PerformanceAnalytics)
+library(corrplot)
+library(ggbiplot) 
+library(ggrepel)
+library(FactoMineR)
+library(factoextra)
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(Biostrings)
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+```
+
+```{r setup and load data, echo=FALSE, warning=FALSE, message=FALSE}
+setwd("T:/vaccine/rtss_malaria_sieve/")
+TEP.data <- read_tsv("qdata/sequences/TEP.tsv")
+
+#subset for subjects age 5-17 months, separated into placebo and vaccine
+clinical.data <- read_csv("adata/RTSSclinicalData.csv")
+clinical.data <- subset(clinical.data, ageCateg=="[5-17] months")
+clinical.placebo <- subset(clinical.data, vaccine==0)
+clinical.vaccine <- subset(clinical.data, vaccine==1)
+
+#TEP data for all participants age 5-17 months, as well as separated into vaccine and placebo groups
+TEP.all <- TEP.data[TEP.data$subject %in% clinical.data$id,]
+TEP.placebo <- TEP.data[TEP.data$subject %in% clinical.placebo$id,]
+TEP.vaccine <- TEP.data[TEP.data$subject %in% clinical.vaccine$id,]
+
+#number of distinct subjects in TEP data for participants age 5-17 months
+subjects.TEP <- TEP.all %>% distinct(subject)
+subjects.TEP <- subjects.TEP$subject
+
+#number of distinct subjects in TEP placebo group for participants age 5-17 months
+subjects.placebo <- TEP.placebo %>% distinct(subject)
+subjects.placebo <- subjects.placebo$subject
+
+#number of distinct subjects in TEP vaccine group for participants age 5-17 months
+subjects.vaccine <- TEP.vaccine %>% distinct(subject)
+subjects.vaccine <- subjects.vaccine$subject
+```
+
+###Summary statistics comparison
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#load amino acid placebo dataframe
+placebo.aa.df <- read.csv("C:/Users/Swu2/Documents/placebo.aa.df", row.names = 1, header = TRUE)
+
+#load amino acid placebo fringe-trimmed dataframe
+placebo.aa.fringe <- read.csv("C:/Users/Swu2/Documents/placebo.aa.fringe", row.names = 1, header = TRUE)
+
+
+#untrimmed indices
+placebo <- placebo.aa.df %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+#trimmed indices
+placebo.fringe <- placebo.aa.fringe %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+
+#load amino acid vaccine untrimmed dataframe
+TEP.aa.df <- read.csv("C:/Users/Swu2/Documents/TEP.aa.df", row.names = 1, header = TRUE)
+vaccine.aa.df <- TEP.aa.df %>% filter(!(rownames(TEP.aa.df) %in% rownames(placebo.aa.df)))
+
+#load amino acid vaccine fringe-trimmed dataframe
+vaccine.aa.fringe <- read.csv("C:/Users/Swu2/Documents/vaccine.aa.fringe", row.names = 1, header = TRUE)
+
+
+#untrimmed vaccine indices
+vaccine <- vaccine.aa.df %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+#trimmed vaccine indices
+vaccine.fringe <- vaccine.aa.fringe %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+
+#dataframe of descriptive statistics comparison
+mean <- apply(placebo, 2, function(x) mean(x))
+mean.trim <- apply(placebo.fringe, 2, function(x) mean(x))
+
+min <- apply(placebo, 2, function(x) min(x))
+min.trim <- apply(placebo.fringe, 2, function(x) min(x))
+
+max <- apply(placebo, 2, function(x) max(x))
+max.trim <- apply(placebo.fringe, 2, function(x) max(x))
+
+median <- apply(placebo, 2, function(x) median(x))
+median.trim <- apply(placebo.fringe, 2, function(x) median(x))
+
+sd <- apply(placebo, 2, function(x) sd(x))
+sd.trim <- apply(placebo.fringe, 2, function(x) sd(x))
+
+IQR <- apply(placebo, 2, function(x) IQR(x))
+IQR.trim <- apply(placebo.fringe, 2, function(x) IQR(x))
+
+df <- data.frame(mean, mean.trim, min, min.trim, max, max.trim, median, median.trim, sd, sd.trim, IQR, IQR.trim)
+rownames(df) <- c("H(0)","H(1)","H(2)","CorSegSites","GS","Rao","Mf","Hamming")
+
+t(df)
+
+trim <- t(df[,c(2,4,6,8,10,12)])
+untrim <- t(df[, c(1,3,5,7,9,11)])
+new <- as.data.frame(rbind(trim, untrim))
+new$stat <- rep(c("mean","min","max","median","sd","IQR"),times=2)
+new$label <- c(rep("trim", times=6), rep("untrim", times=6))
+new <- melt(new)
+ggplot(new, aes(y=value, x=stat, color=label, fill=label)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~variable, scale="free")
+
+```
+
+There appears to be slight differences in the trimmed and untrimmed summary statistics for H(0), but the other indices have little noticeable change. 
+
+###Histogram and boxplot comparison
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+placebo$label <- "untrimmed"
+placebo.fringe$label <- "fringe-trimmed"
+combined <- rbind(placebo, placebo.fringe)
+colnames(combined) <- c("H0","H1","H2","CorSegSites","GS","Rao","Mf","Hamming","label")
+
+ggplot(combined, aes(x=H0, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=H1, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=H2, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=CorSegSites, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=GS, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=Rao, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=Mf, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+ggplot(combined, aes(x=Hamming, color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5)
+
+#boxplots
+boxplotdata <- melt(combined)
+ggplot(boxplotdata, aes(x=variable, y=value, fill=label)) + geom_boxplot() + facet_wrap(~variable, scale="free")
+```
+
+For H(0) and CorSegSites, fringe-trimming noticeably shifts the histogram to the left. This effect is smaller in GS and Rao. Histogram differences are not noticeable for H(1), H(2), and Mf. For the equally-weighted Hamming distance, fringe-trimming also results in noticeable changes in the histogram. This may be due to the removal of rare haplotypes, which would result in different Hamming distances for certain individuals.
+
+Fringe-trimming condenses the boxplot for H(0), but not for the other indices. Note the average value for Mf is around 0.075, which is the average weighted proportion of residue mismatches. For Hamming distance, fringe-trimming results in a boxplot slightly shifted towards larger values.  
+
+### Sieve effect p-value comparison
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+P_t <- numeric(3)
+P_t.trim <- numeric(3)
+P_w <- numeric(3)
+P_w.trim <- numeric(3)
+for(i in 1:8){
+  P_t[i] <- t.test(vaccine[,i], placebo[,i])$p.value
+  P_t.trim[i] <- t.test(vaccine.fringe[,i], placebo.fringe[,i])$p.value
+  P_w[i] <- wilcox.test(vaccine[,i], placebo[,i], alternative="two.sided")$p.value
+  P_w.trim[i] <- wilcox.test(vaccine.fringe[,i], placebo.fringe[,i], alternative="two.sided")$p.value
+}
+Q_t <- p.adjust(P_t, method="fdr")
+Q_t.trim <- p.adjust(P_t.trim, method="fdr")
+Q_w <- p.adjust(P_w, method="fdr")
+Q_w.trim <- p.adjust(P_w.trim, method="fdr")
+
+df.contd <- data.frame(P_t, P_t.trim, Q_t, Q_t.trim, P_w, P_w.trim, Q_w, Q_w.trim)
+rownames(df.contd) <- c("H(0)","H(1)","H(2)", "CorSegSites","GS","Rao","Mf","Hamming")
+
+t(df.contd)
+
+trim <- t(df.contd[,c(2,4,6,8)])
+untrim <- t(df.contd[, c(1,3,5,7)])
+new <- as.data.frame(rbind(trim, untrim))
+new$stat <- rep(c("P_t","Q_t","P_w","Q_w"),times=2)
+new$label <- c(rep("trim", times=4), rep("untrim", times=4))
+new <- melt(new)
+ggplot(new, aes(y=value, x=stat, color=label, fill=label)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~variable, scale="free")
+```
+
+The y-axis is increasing, so larger bars represent larger (less significant) p-values. P_t and P_w are the p-values for t-test and wilcoxon test, respectively, and Q_t and Q_w are their corresponding q values. 
+
+Sieve effects are consistently less significant for the trimmed indices. Differences are most apparent for H(0) and CorSegSites. For all but CorSegSites, t-test p-values are larger than Wilcoxon test p-values. 
+
+Note that the p-values for Mf are quite large.  
+
+
+#Summary Statistics Comparison between Placebo and Vaccine (Untrimmed)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#dataframe of descriptive statistics comparison
+
+#untrimmed indices
+placebo <- placebo.aa.df %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+#trimmed indices
+placebo.fringe <- placebo.aa.fringe %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+#load amino acid vaccine fringe-trimmed dataframe
+vaccine.aa.fringe <- read.csv("C:/Users/Swu2/Documents/vaccine.aa.fringe", row.names = 1, header = TRUE)
+
+#untrimmed vaccine indices
+vaccine <- vaccine.aa.df %>% select("H.0.", "H.1.","H.2.","CorSegSites","GS","Rao","Mf","Hamming")
+
+mean <- apply(placebo, 2, function(x) mean(x))
+mean.vax <- apply(vaccine, 2, function(x) mean(x))
+
+min <- apply(placebo, 2, function(x) min(x))
+min.vax <- apply(vaccine, 2, function(x) min(x))
+
+max <- apply(placebo, 2, function(x) max(x))
+max.vax <- apply(vaccine, 2, function(x) max(x))
+
+median <- apply(placebo, 2, function(x) median(x))
+median.vax <- apply(vaccine, 2, function(x) median(x))
+
+sd <- apply(placebo, 2, function(x) sd(x))
+sd.vax <- apply(vaccine, 2, function(x) sd(x))
+
+IQR <- apply(placebo, 2, function(x) IQR(x))
+IQR.vax <- apply(vaccine, 2, function(x) IQR(x))
+
+df <- data.frame(mean, mean.vax, min, min.vax, max, max.vax, median, median.vax, sd, sd.vax, IQR, IQR.vax)
+rownames(df) <- c("H(0)","H(1)","H(2)","CorSegSites","GS","Rao","Mf","Hamming")
+
+t(df)
+
+vax <- t(df[,c(2,4,6,8,10,12)])
+plac <- t(df[, c(1,3,5,7,9,11)])
+new <- as.data.frame(rbind(vax, plac))
+new$stat <- rep(c("mean","min","max","median","sd","IQR"),times=2)
+new$label <- c(rep("vax", times=6), rep("placebo", times=6))
+new <- melt(new)
+ggplot(new, aes(y=value, x=stat, color=label, fill=label)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~variable, scale="free")
+
+```
+
+#Summary Statistics Comparison between Placebo and Vaccine (Trimmed)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#dataframe of descriptive statistics comparison
+mean <- apply(placebo.fringe, 2, function(x) mean(x))
+mean.vax <- apply(vaccine.fringe, 2, function(x) mean(x))
+
+min <- apply(placebo.fringe, 2, function(x) min(x))
+min.vax <- apply(vaccine.fringe, 2, function(x) min(x))
+
+max <- apply(placebo.fringe, 2, function(x) max(x))
+max.vax <- apply(vaccine.fringe, 2, function(x) max(x))
+
+median <- apply(placebo.fringe, 2, function(x) median(x))
+median.vax <- apply(vaccine.fringe, 2, function(x) median(x))
+
+sd <- apply(placebo.fringe, 2, function(x) sd(x))
+sd.vax <- apply(vaccine.fringe, 2, function(x) sd(x))
+
+IQR <- apply(placebo.fringe, 2, function(x) IQR(x))
+IQR.vax <- apply(vaccine.fringe, 2, function(x) IQR(x))
+
+df <- data.frame(mean, mean.vax, min, min.vax, max, max.vax, median, median.vax, sd, sd.vax, IQR, IQR.vax)
+rownames(df) <- c("H(0)","H(1)","H(2)","CorSegSites","GS","Rao","Mf","Hamming")
+
+t(df)
+
+vax <- t(df[,c(2,4,6,8,10,12)])
+plac <- t(df[, c(1,3,5,7,9,11)])
+new <- as.data.frame(rbind(vax, plac))
+new$stat <- rep(c("mean","min","max","median","sd","IQR"),times=2)
+new$label <- c(rep("vax", times=6), rep("placebo", times=6))
+new <- melt(new)
+ggplot(new, aes(y=value, x=stat, color=label, fill=label)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~variable, scale="free")
+
+```
+
+### Comparison between number of reads (per subject) for untrimmed and trimmed groups, respectively
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#reads summary
+num.reads <- numeric(length(subjects.placebo))
+num.reads.fringe <- numeric(length(subjects.placebo))
+for(i in 1:length(subjects.placebo)){
+  sub <- subjects.placebo[i]
+  data <- TEP.placebo %>% filter(subject==sub) %>% select(pep_sequence, reads)
+  count <- as.vector(data$reads)
+  num.reads[i] <- sum(count)
+  #fringe-trimming
+  cutoff <- qbinom(0.9, size=sum(count), prob = 0.01, lower.tail=TRUE)
+  for(j in 1:length(count)){
+    if(count[j] < cutoff){
+      count[j] <- NA
+    }
+  }
+  count <- na.omit(count)
+  num.reads.fringe[i] <- sum(count)
+}
+summary(num.reads)
+summary(num.reads.fringe)
+```
+
+####For vaccines
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#===for vaccines
+num.reads.vax <- numeric(length(subjects.vaccine))
+num.reads.fringe.vax <- numeric(length(subjects.vaccine))
+for(i in 1:length(subjects.vaccine)){
+  sub <- subjects.vaccine[i]
+  data <- TEP.vaccine %>% filter(subject==sub) %>% select(pep_sequence, reads)
+  count <- as.vector(data$reads)
+  num.reads.vax[i] <- sum(count)
+  #fringe-trimming
+  cutoff <- qbinom(0.9, size=sum(count), prob = 0.01, lower.tail=TRUE)
+  for(j in 1:length(count)){
+    if(count[j] < cutoff){
+      count[j] <- NA
+    }
+  }
+  count <- na.omit(count)
+  num.reads.fringe.vax[i] <- sum(count)
+}
+summary(num.reads.vax)
+summary(num.reads.fringe.vax)
+
+
+```
+
+The fringe-trimmed dataset has, on average, slightly fewer reads than the un-trimmed dataset, which suggests some haplotypes have been "trimmed" out of the dataset. 
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+vax3D7 <- "DENANANSAVKNNNNEEPSDKHIKEYLNKIQNSLSTEWSPCSVTCGNGIQVRIKPGSANKPKDELDYANDIEKKICKMEKCSSVFNVVNSSIGLI"
+```
+
+
+##Appendix
+```{r ref.label=knitr::all_labels(), eval=FALSE, echo=TRUE}
+
+```
