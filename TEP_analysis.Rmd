@@ -1,0 +1,310 @@
+---
+title: "TEP Graphics"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(dplyr)
+library(Biostrings)
+knitr::opts_chunk$set(fig.width=11, fig.height=10)
+```
+
+*Needs the functions in "DiversityIndices.R" file. *
+```{r, warning=FALSE, message=FALSE}
+source("C:/Users/Swu2/Documents/DiversityIndices.R")
+```
+
+##1. Loading data and creating dataframe of indices. 
+```{r dataframe, message=FALSE, warning=FALSE}
+#load TEP data
+setwd("T:/vaccine/rtss_malaria_sieve/")
+TEP.data <- read_tsv("qdata/sequences/TEP.tsv")
+
+
+#subset for subjects age 5-17 months, separated into placebo and vaccine
+clinical.data <- read_csv("adata/RTSSclinicalData.csv")
+clinical.data <- subset(clinical.data, ageCateg=="[5-17] months")
+clinical.placebo <- subset(clinical.data, vaccine==0)
+clinical.vaccine <- subset(clinical.data, vaccine==1)
+
+#TEP data for all participants age 5-17 months, as well as separated into vaccine and placebo groups
+TEP.all <- TEP.data[TEP.data$subject %in% clinical.data$id,]
+TEP.placebo <- TEP.data[TEP.data$subject %in% clinical.placebo$id,]
+TEP.vaccine <- TEP.data[TEP.data$subject %in% clinical.vaccine$id,]
+
+#number of distinct subjects in TEP data for participants age 5-17 months
+subjects.TEP <- TEP.all %>% distinct(subject)
+subjects.TEP <- subjects.TEP$subject
+
+#=====================================================
+#TEP dataframe of indices
+TEP.df <- read.csv("C:/Users/Swu2/Documents/TEP.df", row.names = 1, header = TRUE)
+vaccine <- ifelse(rownames(TEP.df) %in% TEP.vaccine$subject, "vaccine", "placebo")
+```
+
+##2. Histograms. 
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(reshape2)
+library(ggplot2)
+```
+
+First we examine the histograms of the diversity indices. 
+
+```{r histograms}
+ggplot(data = melt(TEP.df), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free")
+```
+
+Notice that:
+
+1. The dN2ds-related indices are pretty much constant. Since they hardly vary for any individuals, they are not useful indices in explaining variation in the data. 
+
+2. The Ratio-related indices are bimodal, with the values either equalling 0, or distributed in a clump centered around 1.0-1.5. 
+
+3. All other indices are skewed to the right, with the majority of data points taking on the lowest value. This suggests one strain is particularly dominant. 
+
+4. The FAD-related indices have little variance and also a smaller skew. 
+
+##. Principal Component Analysis
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(devtools)
+install_github("ggbiplot", "vqv")
+library(ggbiplot) 
+library(ggrepel)
+library(FactoMineR)
+library(factoextra)
+```
+
+```{r PCA}
+is.na(TEP.df) <- do.call(cbind,lapply(TEP.df, is.infinite))
+TEP.df[is.na(TEP.df)] <- 0
+
+#standardize to have mean 0 and variance 1, since variables use different units and we want the different indices to be weighted equally
+TEP.pca <- PCA(TEP.df, scale.unit=TRUE, graph=FALSE)
+
+#disable scientific notation and limit number of digits to 4
+options("scipen" = 100)
+
+#eigenvalues measure amount of variation expalined by each PC
+eig.val <- as.data.frame(round(get_eigenvalue(TEP.pca),4))
+eig.val
+```
+
+We use PCA to identify which variables are correlated, search for patterns in the data, and find a low-dimensional representation of the data that retains as much variance as possible. Since we suspect many of the diversity indices are highly correlated, we expect high redundancy in the data. We use PCA to narrow the original indices down to a smaller number of new components that explain most of the variance. 
+
+###Eigenvalues and proportion of variance explained:
+
+Each eigenvalue is the amount of variance the corresponding principal component explains. Eigenvalues decrease in magnitude for subsequent principal components. The sum of all eigenvalues gives the total variance, which is 42 in this case, since there are 42 dimensions and each variable was standardized to have unit variance. 
+
+The second column gives proportion of variance explained by each component. We see that the first principal component gives a lot of information, as it explains 62.8% of the total variance in the observations. The second principal component explains 11.9% of the total variance.
+
+We see that the first 6 principal components all have eigenvalues >1, which indicates that each of these principal components accounts for more variance than an average variable would, so they allow more information to be captured in fewer dimensions. This is often used as a cut-off point when determining how many principal components to retain. In addition, the first 6 principal components cumulatively explain 95.5% of the total variance, which further suggests it is acceptable to only retain the first 6 principal components. 
+
+The scree plot and cumulative proportion graph below give visual representations of how the first 6 principal components explain most of the variance in the data. We can also see how even just the first 4 principal components already explain over 90% of the variance.
+
+```{r screeplot}
+fviz_eig(TEP.pca, addlabels=TRUE)
+plot(eig.val$cumulative.variance.percent/100, xlab="Principal component", ylab="Cumulative Proportion of Variance Explained", ylim=c(0,1), type='b')
+text(eig.val$cumulative.variance.percent[1:6]/100, labels=round(eig.val$cumulative.variance.percent[1:6]/100,2), cex=0.7, adj=c(1,-0.5))
+```
+
+###Contributions:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(corrplot)
+library(gridExtra)
+```
+
+Now we examine the contributions the variables make to the first few principal components.
+
+```{r contributions}
+
+res.var <- get_pca_var(TEP.pca)
+res.var$contrib
+
+#contributions of variables to the first principal component
+fviz_contrib(TEP.pca, choice="var", axes=1)
+```
+
+The dotted red line gives the expected average contribution for a variable, which is about 2.3% (or 1/42). We see that the following 23 variables have larger contributions than this cutoff: Sh, Pi(raw), Rao(samp), Pi(K80), P(Nsyn), GS, Ren(2), Pi(Trv), HC(3), Mf(raw), Mf(K80), UniqMuts, Mf(Nsyn), PolySites, Ren(0), Mf(Trv), H(1), H(2), H(0), H(3), Pi(Syn), N.Sh, and Mf(Syn). Note that Pi(dN2ds), FAD(dN2ds), and Mf(dN2ds) do not contribute to the first principal component.
+
+New we look at the top 10 contributing variables for the first 4 principal components.
+
+```{r}
+p1 <- fviz_contrib(TEP.pca, choice="var", axes=1, top=10)
+p2 <- fviz_contrib(TEP.pca, choice="var", axes=2, top=10)
+p3 <- fviz_contrib(TEP.pca, choice="var", axes=3, top=10)
+p4 <- fviz_contrib(TEP.pca, choice="var", axes=4, top=10)
+grid.arrange(p1,p2,p3,p4, ncol=2, nrow=2)
+```
+
+Previously, we found that the first four principal components explain 62.8, 11.9, 9.2, 7.07 percent of the total variance, respectively. Thus, the first principal component is by far the most important in describing the variation in the data. The first principal component appears to be a combination of many diversity indices, which all play a small role. The second principal component is mostly composed of Ratio-related indices, the third principal component is mostly composed of FAD-related indices, and the fourth principal component is mostly composed of dN2ds-related indices; these indices do not play a large role in the first principal component. 
+
+
+###Biplot
+```{r biplot}
+fviz_pca_biplot(TEP.pca, 
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                fill.ind = vaccine,  addEllipses = TRUE,
+                #Variables
+                col.var = "darkblue",label = "var",
+                legend.title = "Vaccine"
+)
+```
+
+The labels are illegible, but we can still gather some information. We see that the data largely fall on a diagonal axis, suggesting high redundancy in the data. This may also be due to the fact that many of the diversity index histograms were skewed, so a log transformation to the data may be necessary. We can also see outliers in the data. The vaccine and placebo groups are not well differentiated, but the vaccine data points appear slightly more clustered. We can see that the diversity indices fall into three main groups. One is largely correlated with the first principal component and includes the majority of the indices. One is largely correlated with the second principal component and includes Ratio-related indices. And the last is not very correlated with either principal component and includes dN2ds-related indices. This is in accordance with our results from the contribution graphs.
+
+Here is the same biplot, but without overlapping labels. 
+
+```{r}
+fviz_pca_biplot(TEP.pca, 
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                fill.ind = vaccine,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue", #labelsize = 0.8,
+                legend.title = "Vaccine", 
+                repel = TRUE #avoid label overlap
+)                
+
+```
+
+We see that H(3), H(2), Mf(raw), Mf(K80), Mf(Trs), FAD(syn), etc., appear to be highly correlated. The Ratio-related indices appear to be highly correlated. PolySites, Ren(0), UniqMuts, Mfmax, and N.Sh appear to be highly correlated. The dN2ds-related indices appear to be highly correlated.
+
+
+##4. Correlation:
+We can check our results with correlation matrices.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library("PerformanceAnalytics")
+library(Hmisc)
+library(corrplot)
+```
+
+```{r cor}
+pearson <- cor(TEP.df, method="pearson")
+spearman <- cor(TEP.df, method = "spearman")
+
+#p-values
+round(rcorr(as.matrix(TEP.df), type="pearson")$P,3)
+```
+
+For lack of space, we do not display the entire correlation p-value matrix. We see that the majority of the p-values are >0.05, indicating significant correlation. Some notable exceptions are dN2ds-associated indices.
+
+Below, we have various correlation plots that shed more light on the relationships between the variables. From these, we can further determine which diversity indices encapsulate similar information, and which encapsulate different information. 
+
+```{r}
+#pearson and spearman correlation plots of all variables. A general shape of the relationship is given, and the strength of the relationship is color-coded.
+corrplot(pearson, type="upper", method = "number", number.cex = .5)
+corrplot(pearson, type="upper", method = "ellipse")
+corrplot(spearman, type="upper", method = "ellipse")
+```
+
+The pearson correlation plot measures linear correlation. Almost all of the relationships are positive, though there are a few weak negative relationships between dN2ds-related and Ratio-related variables. Some relationships appear to be very strong, with correlation coefficients nearing one. 
+
+The spearman correlation plot measures linear correlation, but applied to ranks. Here, all of the relationships are positive, with many having a correlation coefficient that approaches 1. 
+
+###Ordered Correlation
+To gain a better sense of which variables are similar, we order the variables according to their angular positions when plotted on the two-dimensional PCA biplot. Variables that are closer together on the biplot will also be placed closer together on the correlation plot. 
+
+```{r}
+corrplot(pearson, type="upper", order = "AOE")
+corrplot(spearman, type="upper", order = "AOE")
+```
+
+Correlations:
+
+* dN2ds-related indices: 
+  + Highly correlated with each other
+  + not correlated with any other indices. This is in agreement with our previous findings through histograms and PCA. 
+* H(3): 
+  +Strongly correlated with H(2), H(1), Ren(2), Sh, and GS
+* FAD-related indices:
+  + Highly correlated with each other and H(0)
+  + Not very correlated with other indices
+* Ratio-related indices:
+  + Highly correlated with each other
+  + Moderately correlated with UniqMuts, PolySites, and Ren(0)
+  + Not really correlated with other indices
+* Mf(Trs): 
+  + Highly correlated with Mf(K80), Mf(raw), Pi(Trs)
+  + Moderately correlated with Mf(Syn), Mf(Nsyn), Pi(Syn), Pi(K80), Rao(samp), and Pi(raw)
+Mf(K80), Mf(raw), Mf(Nsyn), Mf(Trv), Pi(Syn), Ren(2), Pi(K80), Rao(samp), Pi(raw), Pi(Trv),Pi(Nsyn), Sh, GS, and HC(3) are all very strongly correlated with each other. 
+* UniqMuts: 
+  + Strongly correlated with PolySites, Ren(0)
+  + Moderately correlated with Mfmax and Ratio-related indices
+* Mf(Syn):
+  + Highly correlated with Mf(K80), Mf(raw), Pi(Syn), Pi(K80), Rao(samp), Pi(raw)
+  + Moderately correlated with Pi(Trs), Mf(Nsyn), Mf(Trv), Pi(Trv), Pi(Nsyn), Sh, GS, and HC(3)
+* H(1):
+  + Highly correlated with Sh, GS, and Ren(2)
+
+###Clusters
+
+This gives us roughly 8 clusters of indices. Note: most variation is determined by eyeballing the histograms.
+
+* Cluster 1: Mf(dN2ds), FAD(dN2ds), Pi(dN2ds). These should not be included because they do not explain variation.
+
+* Cluster 2: Ratio(dN2ds), Ratio(Trs), Ratio(Syn), Ratio(Trv), Ratio(K80), Ratio(raw), Ratio(Nsyn). Of these, raw, syn, nsyn, and k80 have most variation.
+
+* Cluster 3: FAD(Trs), FAD(Syn), FAD(Trv), FAD(K80), FAD(raw), FAD(Nsyn), H(0). Of these, H(0) and FAD(Nsyn) have most variance.
+
+* Cluster 4:Pi(Trs), Pi(Syn), Pi(Trv), Pi(K80), Pi(raw), Pi(Nsyn), Mf(Trs), Mf(Syn), Mf(Trv), Mf(K80), Mf(raw), Mf(Nsyn), Ren(2), Rao(samp), Sh, GS, HC(3). Of these, Mf(raw), Pi(raw), Pi(Trv), Mf(Trv), Sh GS, and HC(3) have most variance.
+
+* Cluster 5: H(1), H(2), H(3). H(1) has most variance.
+
+* Cluster 6: UniqMuts, PolySites, Ren(0). UniqMuts has most variance.
+
+* Cluster 7: Mfmax
+
+* Cluster 8: N.Sh
+
+We can also look at the relationships among variables according to the first principal component.
+
+```{r}
+corrplot(pearson, type="upper", order = "FPC")
+```
+
+###Correlation chart
+Next, we can examine the correlation values, scatterplots, histograms, and correlation significance values for the indices. We only use 15 indices at a time to aid in legibility.
+
+```{r corr chart}
+#chart with correlation, scatterplot, and significance (0.05, 0.01, 0.001)
+#uses subset of indices for legibility
+suppressWarnings(chart.Correlation(TEP.df[,1:15], histogram=TRUE, method = "pearson", pch=19))
+suppressWarnings(chart.Correlation(TEP.df[,16:30], histogram=TRUE, method = "pearson", pch=19))
+suppressWarnings(chart.Correlation(TEP.df[,31:42], histogram=TRUE, method = "pearson", pch=19))
+
+suppressWarnings(chart.Correlation(TEP.df[,1:15], histogram=TRUE, method = "spearman", pch=19))
+```
+
+The results are similar to previous results for all of the charts. There appears to be some logistic relationships between variables. 
+
+For the first chart, the strongest correlations, with coefficients of 0.96-0.99 are between:
+* GS and HC(3) and Sh
+* Sh and Ren(2) and GS
+* H(1) and H(2) and H(3) and Ren(2)
+* PolySites and UniqMuts
+* Rao(samp) and Mf(raw)
+
+
+##5. Extra information: dataframe of descriptive statistics for all indices
+```{r descriptive}
+mean <- apply(TEP.df, 2, function(x) mean(x))
+sd <- apply(TEP.df, 2, function(x) sd(x))
+median <- apply(TEP.df, 2, function(x) median(x))
+IQR <- apply(TEP.df, 2, function(x) IQR(x))
+df <- data.frame(mean, sd, median, IQR)
+rownames(df) <- colnames(TEP.df)
+df
+```
+
+
