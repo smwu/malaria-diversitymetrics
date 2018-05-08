@@ -1,0 +1,617 @@
+---
+title: "TEP Placebo Graphics"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(dplyr)
+library(Biostrings)
+knitr::opts_chunk$set(fig.width=10, fig.height=9)
+```
+We perform an analysis with only the data from placebo subjects. This will give us the trial population complexity of circulating pathogen sequences, in addition to providing an idea of the malaria composition of the natural population in the field.
+
+*Needs the functions in "DiversityIndices.R" file. *
+```{r, warning=FALSE, message=FALSE}
+source("C:/Users/Swu2/Documents/DiversityIndices.R")
+```
+
+# 1. Loading data and creating dataframe of indices. 
+```{r dataframe, message=FALSE, warning=FALSE}
+#load TEP data
+setwd("T:/vaccine/rtss_malaria_sieve/")
+TEP.data <- read_tsv("qdata/sequences/TEP.tsv")
+
+#subset for subjects age 5-17 months, separated into placebo and vaccine
+clinical.data <- read_csv("adata/RTSSclinicalData.csv")
+clinical.data <- subset(clinical.data, ageCateg=="[5-17] months")
+clinical.placebo <- subset(clinical.data, vaccine==0)
+clinical.vaccine <- subset(clinical.data, vaccine==1)
+
+#TEP data for all participants age 5-17 months, as well as separated into vaccine and placebo groups
+TEP.all <- TEP.data[TEP.data$subject %in% clinical.data$id,]
+TEP.placebo <- TEP.data[TEP.data$subject %in% clinical.placebo$id,]
+TEP.vaccine <- TEP.data[TEP.data$subject %in% clinical.vaccine$id,]
+
+#number of distinct subjects in TEP placebo group for participants age 5-17 months
+subjects.placebo <- TEP.placebo %>% distinct(subject)
+subjects.placebo <- subjects.placebo$subject
+
+#=======================================================================================
+#load TEP placebo dataframe of indices
+placebo.df <- read.csv("C:/Users/Swu2/Documents/placebo.df", row.names = 1, header = TRUE)
+site <- character(length(subjects.placebo))
+for(i in 1:length(site)){
+  site[i] <- as.character(clinical.data %>% filter(id==subjects.placebo[i]) %>% select(site))
+}
+```
+
+# 2. Histograms. 
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(reshape2)
+library(ggplot2)
+```
+
+First we examine the histograms of the diversity indices. 
+
+```{r histograms, echo=FALSE, message=FALSE}
+ggplot(data = melt(placebo.df), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free")
+```
+
+Notice that:
+
+1. The histograms appear to have similar shape but slightly more variation compared to the combined dataset histograms. 
+
+2. The dN2ds-related indices are pretty much constant. Since they hardly vary for any individuals, they are not useful indices in explaining variation in the data. 
+
+3. The Ratio-related indices are bimodal, with the values either equalling 0, or distributed in a clump centered around 1.0-1.5. 
+
+4. All other indices are generally skewed to the right, with the majority of data points taking on the lowest value. This suggests one strain is particularly dominant. 
+
+5. The FAD-related indices have little variance and also a smaller skew. 
+
+# 3. Principal Component Analysis
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(devtools)
+install_github("ggbiplot", "vqv")
+library(ggbiplot) 
+library(ggrepel)
+library(FactoMineR)
+library(factoextra)
+```
+
+```{r PCA}
+#0 imputed for missing values
+is.na(placebo.df) <- do.call(cbind,lapply(placebo.df, is.infinite))
+placebo.df[is.na(placebo.df)] <- 0
+
+#standardize to have mean 0 and variance 1, since variables use different units and we want the different indices to be weighted equally
+placebo.pca <- PCA(placebo.df, scale.unit=TRUE, graph=FALSE)
+
+#disable scientific notation and limit number of digits to 4
+options("scipen" = 100)
+
+#eigenvalues measure amount of variation expalined by each PC
+eig.val <- as.data.frame(round(get_eigenvalue(placebo.pca),4))
+eig.val
+```
+
+```{r, echo=FALSE}
+pc1 <- round(get_eigenvalue(placebo.pca)[1,2],1)
+pc2 <- round(get_eigenvalue(placebo.pca)[2,2],1)
+pc3 <- round(get_eigenvalue(placebo.pca)[3,2],1)
+pc4 <- round(get_eigenvalue(placebo.pca)[4,2],1)
+pc5 <- round(get_eigenvalue(placebo.pca)[5,2],1)
+cumu6 <- round(eig.val$cumulative.variance.percent[6],1)
+```
+We use PCA to identify which variables are correlated, search for patterns in the data, and find a low-dimensional representation of the data that retains as much variance as possible. Since we suspect many of the diversity indices are highly correlated, we expect high redundancy in the data. We use PCA to narrow the original indices down to a smaller number of new components that explain most of the variance. 
+
+##Eigenvalues and proportion of variance explained:
+
+Each eigenvalue is the amount of variance the corresponding principal component explains. Eigenvalues decrease in magnitude for subsequent principal components. The sum of all eigenvalues gives the total variance, which is 42 in this case, since there are 42 dimensions and each variable was standardized to have unit variance. 
+
+The second column gives proportion of variance explained by each component. We see that the **1st principal component** gives a lot of information, as it explains **`r pc1`%** of the total variance in the observations (slightly lower than combined dataset's 62.8%). The **2nd principal component** explains **`r pc2`%** of the total variance (slightly higher combined dataset's 11.9%).
+
+We see that the first 6 principal components all have eigenvalues >1, which indicates that each of these principal components accounts for more variance than an average variable would, so they allow more information to be captured in fewer dimensions. This is often used as a cut-off point when determining how many principal components to retain. In addition, the **first 6 principal components** cumulatively explain **`r cumu6`%** of the total variance (slightly lower than combined dataset's 95.5%), which further suggests it is acceptable to only retain the first 6 principal components. 
+
+We can also see how even just the **first 4 principal components** already explain **over 90%** of the variance. For simplicity, we will focus on the first few principal components for our analysis.
+
+The scree plot and cumulative proportion graph below give visual representations of how the first few principal components explain most of the variance in the data. There appears to be a **drop-off after the 4th principal component**.
+
+
+```{r screeplot, echo=FALSE}
+fviz_eig(placebo.pca, addlabels=TRUE, main="Scree plot for Standardized PCA")
+plot(eig.val$cumulative.variance.percent/100, xlab="Principal component", ylab="Cumulative Proportion of Variance Explained", ylim=c(0,1), type='b')
+text(eig.val$cumulative.variance.percent[1:6]/100, labels=round(eig.val$cumulative.variance.percent[1:6]/100,2), cex=0.7, adj=c(1,-0.5))
+```
+
+##Contributions:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(corrplot)
+library(gridExtra)
+```
+
+Now we examine the contributions the variables make to the first few principal components
+
+```{r contributions, echo=FALSE}
+res.var <- get_pca_var(placebo.pca)
+res.var$contrib
+
+#contributions of variables to the first principal component
+fviz_contrib(placebo.pca, choice="var", axes=1)
+```
+
+The dotted red line gives the expected average contribution for a variable, which is about 2.3% (or 1/42). We see that the following 23 variables have larger contributions than this cutoff: Sh, Rao(samp), Pi(raw), Pi(K80), P(Nsyn), GS, Ren(2), Pi(Trv), HC(3), Mf(raw), Mf(K80), UniqMuts, Mf(Nsyn), PolySites, Ren(0), H(1), Mf(Trv), H(2), H(3), H(0), Pi(Syn), N.Sh, and Mf(Syn). These are the same variables as in the combined dataset; they have almost the same ordering, but slightly higher contribution. The Ratio indices contribute slightly less than they did in the combined dataset. Note that, once again, Pi(dN2ds), FAD(dN2ds), and Mf(dN2ds) do not contribute to the first principal component.
+
+Now we look at the top 15 contributing variables for the 2nd, 3rd, 4th, and 5th principal components.
+
+```{r, echo=FALSE}
+p2 <- fviz_contrib(placebo.pca, choice="var", axes=2, top=15, title="Top 15 Variable Contributions to PC 2")
+p3 <- fviz_contrib(placebo.pca, choice="var", axes=3, top=15, title="Top 15 Variable Contributions to PC 3")
+p4 <- fviz_contrib(placebo.pca, choice="var", axes=4, top=15, title="Top 15 Variable Contributions to PC 4")
+p5 <- fviz_contrib(placebo.pca, choice="var", axes=5, top=15, title="Top 15 Variable Contributions to PC 5")
+grid.arrange(p2,p3,p4,p5, ncol=2, nrow=2)
+```
+
+Previously, we found that the first 5 principal components explain `r pc1`, `r pc2`, `r pc3`, `r pc4`, `r pc5` percent of the total variance, respectively. Thus, the 1st PC is by far the most important in describing the variation in the data. The 1st PC appears to be a combination of many diversity indices, which all play a small role. The 2nd PC is mostly composed of Ratio-related indices, the 3rd PC is mostly composed of FAD-related indices, as well as H0 and N.Sh to a smaller extent, the 4th PC is mostly composed of dN2ds-related indices, and the 5th PC is mostly composed of Pi.Trs and Mf.Trs; these indices do not play a large role in the first principal component. 
+
+We achieve similar results using "prcomp" to calculate PCA. With "prcomp," we can see the contributions in terms of the loading vectors.
+
+```{r princomp}
+pca <- prcomp(placebo.df, center=TRUE, scale = TRUE)
+summary(pca)
+barplot(sort(pca$rotation[,1], decreasing=TRUE),cex.names = 0.7, las=2, main="Loadings for 1st PC")
+barplot(sort(pca$rotation[,2], decreasing=TRUE), cex.names=0.7, las=2, main="Loadings for 2nd PC")
+```
+
+##Biplot
+
+```{r biplot, echo=FALSE}
+fviz_pca_biplot(placebo.pca, 
+                title="Standardized PCA Biplot with overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                col.var = "darkblue",label = "var",
+                legend.title = "Site"
+)
+```
+
+The labels are illegible, but we can still gather some information. We see that the data largely fall on a diagonal axis, suggesting high redundancy in the data. This may also be due to the fact that many of the diversity index histograms were skewed, so a log transformation to the data may be necessary. We can also see outliers in the data. We can note a few observations:
+
+* The majority of the indices fall along the diagonal axis and are positively correlated with the 1st PC and negative correlated with the 2nd PC
+
+* A few indices are highly positively correlated with the 2nd PC and include Ratio-related indices
+
+* A few indices are positively correlated with both principal components
+
+* Some dN2ds-related indices are not correlated with the 1st PC but are slightly negatively correlated with the 2nd PC.
+
+These observations are in accordance with our results from the contribution graphs.
+
+The larger dots denote the centers of the groups. We see a bit of variation between the sites. For example, Kilifi and Nanoro appear to be outliers, with Kilifi having low values for PC1 and PC2, and Nanor having low values ofr PC1 and high values for PC2. Examining the frequency of observations at each site (see table below), we see that the sites with fewer observations appear farther from the center of the biplot. 
+
+```{r site table, echo=FALSE}
+as.data.frame(table(site))
+```
+
+Here is the same biplot, but without overlapping labels and ellipses. 
+
+```{r, echo=FALSE}
+fviz_pca_biplot(placebo.pca, 
+                title="Standardized PCA Biplot with repelled labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = FALSE,
+                #Variables
+                label = "var", 
+                col.var="darkblue", #labelsize = 0.8,
+                legend.title = "Site", 
+                repel = TRUE #avoid label overlap
+)                
+
+```
+
+With the labels more visible, soem of the correlations we see are: 
+
+* Pi-related, FAD-related, Mf-related, and H-related variables, among others
+
+* Ratio-related indices
+
+* PolySites, Ren.0, UniqMuts, and Mfmax
+
+* FAD.dN2ds, Mf.dN2ds, and Pi.dN2ds
+
+* H.0 and N.Sh
+
+* GS and Sh
+
+##Raw PCA
+
+```{r raw pca} 
+placebo.raw.pca <- PCA(placebo.df, scale.unit=FALSE, graph=FALSE)
+
+#screeplot
+fviz_eig(placebo.raw.pca, addlabels=TRUE, main="Screeplot")
+
+#contributions of variables to first and second principal component
+pc1 <- fviz_contrib(placebo.raw.pca, choice="var", axes=1, top=15, title="Top 15 Variable Contributions to PC 1")
+pc2 <- fviz_contrib(placebo.raw.pca, choice="var", axes=2, top=15, title="Top 15 Variable Contributions to PC 2")
+grid.arrange(pc1, pc2, ncol=2)
+
+#biplot with overlapping labels
+fviz_pca_biplot(placebo.raw.pca, 
+                title="Raw PCA Biplot with overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                legend.title = "Site", 
+                repel = FALSE #labels may overlap
+) 
+
+#biplot with non-overlapping labels
+fviz_pca_biplot(placebo.raw.pca, 
+                title="Raw PCA Biplot with non-overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue", #labelsize = 0.8,
+                legend.title = "Site", 
+                repel = TRUE #avoid label overlap
+) 
+```
+
+All figures point to the variance in the data being dominated by three variables: FAD.dN2ds, Pi.dN2ds, and mf.dN2ds (note: in the second biplot many of the lines are part of the labels, not the variable vectors). This is likely because these variables range over the real line, whereas other variables take a much smaller range of values. 
+
+From the histograms, we see that these three variables actually have very little variation, so it may be wise to exclude them from PCA analysis of raw variables.
+
+##Raw PCA with Pi.dN2dS, Mf.dN2ds, and FAD.dN2ds removed:
+
+```{r raw excluded}
+placebo.remove <- subset(placebo.df, select = -c(Mf.dN2ds., Pi.dN2ds., FAD.dN2ds.))
+
+#change infinite values to 0
+is.na(placebo.remove) <- do.call(cbind,lapply(placebo.remove, is.infinite))
+placebo.remove[is.na(placebo.remove)] <- 0
+
+placebo.remove.pca <- PCA(placebo.remove, scale.unit =FALSE, graph = FALSE)
+
+#screeplot
+fviz_eig(placebo.remove.pca, addlabels=TRUE, main = "Screeplot Raw PCA with dN2ds removed")
+
+#contributions of variables to the first and second principal components
+pc1 <- fviz_contrib(placebo.remove.pca, choice="var", axes=1, top=15, title="Top 15 Variable Contributions to PC 1")
+pc2 <- fviz_contrib(placebo.remove.pca, choice="var", axes=2, top=15, title="Top 15 Variable Contributions to PC 2")
+grid.arrange(pc1, pc2, ncol=2)
+
+#biplot with overlapping labels
+fviz_pca_biplot(placebo.remove.pca, 
+                title = "Raw PCA Biplot with dN2ds removed and overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                legend.title = "Site", 
+                repel = FALSE #labels overlap
+)
+
+#biplot with non-overlapping labels
+fviz_pca_biplot(placebo.remove.pca, 
+                title = "Raw PCA Biplot with dN2ds removed and repelled labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                legend.title = "Site", 
+                repel = TRUE #avoid label overlap
+) 
+```
+
+There is more variation in dominant variables this time, but the dominance of these variables may, once again, be due to having larger ranges compared to other variables. For example, GS is likely not listed as a major contributor because its range is limited to [0,1].
+
+## PCA with Box-Cox Transformation applied to all variables
+Since the majority of the variables are heavily positively skewed, we perform a transformation on the variables as a sensitivity analysis.
+
+```{r boxcox, echo=FALSE, results=FALSE, warning= FALSE, message=FALSE}
+library(e1071)
+library(caret)
+library(PerformanceAnalytics)
+```
+
+```{r pca box-cox transform}
+placebo.trans <- preProcess(x = placebo.df,method = c("BoxCox","center","scale"))
+placebo.preproc <- predict(placebo.trans, newdata = placebo.df)
+placebo.boxcox.pca <- PCA(placebo.preproc, graph=FALSE)
+
+#screeplot
+fviz_eig(placebo.boxcox.pca, addlabels=TRUE, main="Screeplot for Box-Cox Transformed Variables")
+
+#contributions of variables to the first and second principal components
+pc1 <- fviz_contrib(placebo.boxcox.pca, choice="var", axes=1, top=15, title="Top 15 Variable Contributions to PC 1")
+pc2 <- fviz_contrib(placebo.boxcox.pca, choice="var", axes=2, top=15, title="Top 15 Variable Contributions to PC 2")
+grid.arrange(pc1, pc2, ncol=2)
+
+#biplot with overlapping labels
+fviz_pca_biplot(placebo.boxcox.pca,
+                title = "Box-Cox Transformed PCA with non-overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                legend.title = "Site", 
+                repel = TRUE #no labels overlap
+)
+#correlation matrix for BoxCox-transformed, centered, and scaled data
+suppressWarnings(chart.Correlation(placebo.preproc[,1:15], histogram=TRUE, method = "pearson", pch=19, main="Correlation Matrix for BoxCox-transformed variables"))
+```
+
+##PCA on Log-transformed Variables (Mf.dN2ds, Pi.dN2ds, FAD.dn2ds excluded)
+
+```{r log}
+placebo.log <- log(placebo.remove+0.01, base=exp(1)) #translate the data so no negative values
+placebo.log.pca <- PCA(placebo.log, scale.unit=TRUE, graph=FALSE)
+
+#screeplot
+fviz_eig(placebo.log.pca, addlabels=TRUE, main="Screeplot for Log-transformed variables")
+
+#contributions of variables to the first and second principal components
+pc1 <- fviz_contrib(placebo.log.pca, choice="var", axes=1, top=15, title="Top 15 Variable Contributions to PC 1")
+pc2 <- fviz_contrib(placebo.log.pca, choice="var", axes=2, top=15, title="Top 15 Variable Contributions to PC 2")
+grid.arrange(pc1, pc2, ncol=2)
+
+#biplot with non-overlapping labels
+fviz_pca_biplot(placebo.log.pca, 
+                title="PCA Biplot for Log-transformed variables with non-overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                legend.title = "Site", 
+                repel = TRUE #no labels overlap
+)
+
+#histograms of log-transformed variables
+ggplot(data = melt(placebo.log), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms of Log-Transformed Variables")
+```
+
+The results emphasize different indices as being important. However, transforming the data inherently changes the relationships between variables, so these results do not provide much additional information on how the non-transformed indices compare. 
+
+
+##Restricted PCA
+```{r restricted PCA}
+gr1 <- c("Pi.dN2ds.", "Mf.dN2ds.", "FAD.dN2ds.")
+gr2 <- c("Ratio.raw.", "Ratio.K80.", "Ratio.Nsyn.", "Ratio.Trv.", "Ratio.Syn.", "Ratio.Trs.", "Ratio.dN2ds.")
+gr3 <- c("FAD.raw.", "FAD.K80.",  "FAD.Nsyn.", "FAD.Trv.", "FAD.Syn.","FAD.Trs.")
+gr4 <- c("Ren.0.", "Uniq.Muts", "PolySites", "H.0.", "Mfmax")
+gr5 <- c("Pi.Trs","Mf.Trs")
+gr6 <- c("Mf.Syn","Pi.Syn")
+gr7 <- c("Sh", "GS","Ren.2.","HC.3.", "N.Sh", "H.1.","H.2.", "H.3.")
+gr8 <- c("Rao.samp.","Pi.raw.", "Pi.K80.", "Pi.Nsyn.", "Pi.Trv.", "Pi.Syn.", "Mf.raw.", "Mf.K80.", "Mf.Nsyn.", "Mf.Trv.")
+
+# restricted <- select(placebo.df, -c(Ratio.dN2ds.))
+# allcombinations <- expand.grid(gr2,gr3,gr4,gr5,gr6,gr7,gr8) #excludes dN2ds group
+
+
+#Restricted to 7 variables
+restrict7 <- select(placebo.df, c(Ratio.raw., FAD.raw., Pi.Trs., Mf.Syn., UniqMuts, Sh, Rao.samp.))
+restrict7.pca <- PCA(restrict7, scale.unit=TRUE, graph=FALSE)
+#screeplot
+fviz_eig(restrict7.pca, addlabels=TRUE, main="Screeplot for Restriction to 7 variables")
+#contributions
+pc1 <- fviz_contrib(restrict7.pca, choice="var", axes=1, title="Variable Contributions to PC 1")
+pc2 <- fviz_contrib(restrict7.pca, choice="var", axes=2, title="Variable Contributions to PC 2")
+pc3 <- fviz_contrib(restrict7.pca, choice="var", axes=3, title="Variable Contributions to PC 3")
+pc4 <- fviz_contrib(restrict7.pca, choice="var", axes=4, title="Variable Contributions to PC 4")
+grid.arrange(pc1, pc2, pc3, pc4, ncol=2, nrow=2)
+#biplot with non-overlapping labels
+fviz_pca_biplot(restrict7.pca, 
+                title="PCA Biplot for 7 variables with non-overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = FALSE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                repel = TRUE #no labels overlap
+)
+
+
+#Restricted to 4 variables
+restrict4 <- select(placebo.df, c(FAD.raw., UniqMuts, Sh, Rao.samp.))
+restrict4.pca <- PCA(restrict4, scale.unit=TRUE, graph=FALSE)
+#screeplot
+fviz_eig(restrict4.pca, addlabels=TRUE, main="Screeplot for Restriction to 4 variables")
+#contributions
+pc1 <- fviz_contrib(restrict4.pca, choice="var", axes=1, title="Variable Contributions to PC 1")
+pc2 <- fviz_contrib(restrict4.pca, choice="var", axes=2, title="Variable Contributions to PC 2")
+pc3 <- fviz_contrib(restrict4.pca, choice="var", axes=3, title="Variable Contributions to PC 3")
+pc4 <- fviz_contrib(restrict4.pca, choice="var", axes=4, title="Variable Contributions to PC 4")
+grid.arrange(pc1, pc2, pc3, pc4, ncol=2, nrow=2)
+#biplot with overlapping labels
+fviz_pca_biplot(restrict4.pca, 
+                title="PCA Biplot for 4 variables with non-overlapping labels",
+                #Individuals
+                geom.ind = "point", pointshape=21, pointsize = 2,
+                #fill.ind = site,  addEllipses = TRUE,
+                #Variables
+                label = "var", 
+                col.var="darkblue",
+                legend.title = "Site", 
+                repel = TRUE #no labels overlap
+)
+
+```
+
+
+#4. Correlation:
+We can check our results with correlation matrices.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library("PerformanceAnalytics")
+library(Hmisc)
+library(corrplot)
+```
+
+```{r cor, echo=FALSE}
+pearson <- cor(placebo.df, method="pearson")
+spearman <- cor(placebo.df, method = "spearman")
+kendall <- cor(placebo.df, method = "kendall")
+```
+
+First we check if the correlations are significant by examining p-values. We use "pearson" correlation for these.
+
+```{p-values}
+head(round(rcorr(as.matrix(placebo.df), type="pearson")$P,3), n=10)
+```
+
+For lack of space, we do not display the entire correlation p-value matrix. We see that the majority of the p-values are >0.05, indicating significant correlation. Some notable exceptions are dN2ds-associated indices.
+
+Below, we have various correlation plots that shed more light on the relationships between the variables. From these, we can further determine which diversity indices encapsulate similar information, and which encapsulate different information. We use `pearson`, `spearman`, and `kendall` correlation coefficients. 
+
+First is the correlation matrix calculated using Pearson's correlation
+```{r pearson, echo=FALSE}
+#pearson's correlation
+as.matrix(round(cor(pearson),2))
+```
+
+Next are pearson, spearman, and kendall correlation plots of all variables. A general shape of the relationship is given, and the strength of the relationship is color-coded 
+```{r corrplots, echo=FALSE}
+#pearson, spearman, and kendall correlation plots of all variables. A general shape of the relationship is given, and the strength of the relationship is color-coded
+corrplot(pearson, type="upper", method = "number", number.cex = .5, title="Pearson's correlation")
+corrplot(pearson, type="upper", method="ellipse", title= "Pearson's correlation, ellipses")
+corrplot(spearman, type="upper", method = "ellipse", title= "Spearman's correlation, ellipses")
+corrplot(kendall, type="upper", method = "ellipse", title = "Kendall's correlation, ellipses")
+```
+
+The pearson correlation plot measures linear correlation. Almost all of the relationships are positive, though there are a few very weak negative relationships for dN2ds-related variables. Some relationships appear to be very strong, with correlation coefficients nearing one. 
+
+Spearman's rho measures linear correlation, but applied to ranks. In essence, it measures the monotonic association between two variables. Here, all of the relationships are positive, with many having a correlation coefficient that approaches 1.
+
+The Kendall's tau measures the relationship between rankings, based on the number of concordant and discordant observation pairs. 
+
+Very strongly correlated variables (0.9-1.0) 
+
+* Ratio.raw, Ratio.K80, Ratio.Trv, Ratio.Syn, and Ratio.Nsyn
+* Sh, GS, H1, H2, H3, Ren2, and HC3 appear very stronly correlated
+* Rao.samp, Mf.raw, Mf.K80, Pi.raw, Pi.K80, Pi.Nsyn, Pi.Trv
+* FAD.raw, FAD.K80, FAD.Trv, FAD.Syn, FAD.Nsyn, FAD.Trs, H.0, Ren.0, PolySites, and UniqMuts
+* Mf.dN2ds, Pi.dN2ds, FAD.dN2ds
+* Mf.Trs, Pi.Trs
+
+##Ordered Correlation
+To gain a better sense of which variables are similar, we cluster similar variables together.  
+
+```{r, echo=FALSE}
+corrplot(pearson, method = "ellipse", order="hclust", title ="Hierarchical Clustering - Pearson")
+corrplot(spearman, method = "ellipse", order="hclust", addrect= 8, title = "Hierarchical Clustering - Spearman")
+corrplot(spearman, method = "ellipse", order="hclust", hclust.method="ward.D", title = "Hierarchical Clustering - Spearman")
+corrplot(kendall, method = "ellipse", order="hclust", title="Hierarchical Clustering - Kendall")
+
+cor.df <- placebo.df[,c("FAD.Trs.","Mf.Trs.","Pi.Trs.","Mfmax","H.0.","Ren.0.","FAD.Trv.","FAD.Nsyn.","FAD.raw.","FAD.K80.","FAD.Syn.","PolySites","UniqMuts","Ratio.dN2ds.","Mf.Syn.","Pi.Syn.","N.Sh","Sh","H.1.","H.3.","HC.3.","GS","H.2.","Ren.2.","Mf.Trv.","Pi.Trv.","Mf.Nsyn.","Pi.Nsyn.","Mf.raw.","Mf.K80.","Pi.K80.","Rao.samp.","Pi.raw.","FAD.dN2ds.","Mf.dN2ds.","Pi.dN2ds.","Ratio.Trs.","Ratio.Syn.","Ratio.Trv.","Ratio.Nsyn.","Ratio.raw.","Ratio.K80.")]
+corrplot(cor(cor.df, method="pearson"), method="ellipse", title="Pearson Comparison")
+```
+
+We can also order the variables according to:
+
+1) their angular positions when plotted on the two-dimensional PCA biplot. Variables that are closer together on the biplot will also be placed closer together on the correlation plot. 
+
+2)the first principal component.
+
+We use Pearson's correlation to illustrate.
+
+```{r, echo=FALSE}
+corrplot(pearson, title = "Angle of Eigenvalue Ordering", type="upper", order = "AOE", method="ellipse")
+
+corrplot(pearson, type="upper", order = "FPC", title = "First Principle Component Ordering")
+```
+
+##Clusters
+
+This gives us roughly 8 clusters of indices. Order is given similar to ordering in a principal component. Note: most variation is determined by eyeballing the histograms.
+
+* Cluster 1: Pi(dN2ds), Mf(dN2ds), FAD(dN2ds). These should not be included because they do not explain variation.
+
+* Cluster 2: Ratio(raw), Ratio(K80), Ratio(Nsyn), Ratio(Trv), Ratio(Syn), Ratio(dN2ds), and Ratio(Trs). Of these, raw, k80, and nsyn have most variation.
+
+* Cluster 3: FAD(raw), FAD(K80), FAD(Nsyn), FAD(Trv), FAD(Syn), and FAD(Trs). Of these, raw and FAD(Nsyn) have most variance.
+
+* Cluster 4: Ren(0), Uniq.Muts, PolySites, H.0, and Mf.max
+
+* Cluster 5: Pi(Trs) and Mf(Trs).
+
+* Cluster 6: Mf(Syn) and Pi(Syn). 
+
+* Cluster 7: Sh, GS, Ren(2), HC(3), N.Sh, H(1), H(2), and H(3). 
+
+* Cluster 8: Rao(samp), Pi(raw), Pi(K80), Pi(Nsyn), Pi(Trv), Mf(raw), Mf(K80), Mf(Nsyn), Mf(Trv)
+
+
+##Correlation chart
+Next, we can examine the correlation values, scatterplots, histograms, and correlation significance values for the indices. We only use 15 indices at a time to aid in legibility.
+
+```{r corr chart, echo=FALSE}
+#chart with correlation, scatterplot, and significance (0.05, 0.01, 0.001)
+#uses subset of indices for legibility
+
+#pearson
+suppressWarnings(chart.Correlation(placebo.df[,1:15], histogram=TRUE, method = "pearson", pch=19, main="Correlation Matrix first 15 vars - Pearson"))
+suppressWarnings(chart.Correlation(placebo.df[,16:30], histogram=TRUE, method = "pearson", pch=19, main="Correlation Matrix next 15 vars - Pearson"))
+suppressWarnings(chart.Correlation(placebo.df[,31:42], histogram=TRUE, method = "pearson", pch=19, main="Correlation Matrix last 12 vars - Pearson"))
+
+#spearman
+suppressWarnings(chart.Correlation(placebo.df[,1:15], histogram=TRUE, method = "spearman", pch=19, main="Correlation Matrix first 15 vars - Spearman"))
+suppressWarnings(chart.Correlation(placebo.df[,16:30], histogram=TRUE, method = "spearman", pch=19, main="Correlation Matrix first 15 vars - Spearman"))
+suppressWarnings(chart.Correlation(placebo.df[,31:42], histogram=TRUE, method = "spearman", pch=19, main="Correlation Matrix first 15 vars - Spearman"))
+```
+
+The results are similar to previous results for all of the charts. There appears to be some logistic relationships between variables. 
+
+For the first chart, the strongest correlations, with coefficients of 0.96-0.99 are between:
+* GS and HC(3) and Sh and Ren(2)
+* H(1) and H(2) and H(3) and Ren(2)
+* PolySites and UniqMuts
+* Rao(samp) and Mf(raw)
+
+
+# 5. Extra information: dataframe of descriptive statistics for all indices
+
+```{r descriptive}
+mean <- apply(placebo.df, 2, function(x) mean(x))
+sd <- apply(placebo.df, 2, function(x) sd(x))
+median <- apply(placebo.df, 2, function(x) median(x))
+IQR <- apply(placebo.df, 2, function(x) IQR(x))
+df <- data.frame(mean, sd, median, IQR)
+rownames(df) <- colnames(placebo.df)
+colnames(df) <- c("Mean","SD","Median","IQR")
+df
+```
+
+# Appendix.
+
+```{r ref.label=knitr::all_labels(), eval=FALSE, echo=TRUE}
+```
+
