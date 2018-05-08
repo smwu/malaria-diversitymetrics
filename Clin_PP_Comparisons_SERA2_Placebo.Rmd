@@ -1,0 +1,254 @@
+---
+title: "Clinical/Parasite Comparisons in SERA2 Placebo"
+author: "Stephanie Wu"
+date: "May 2, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+source("C:/Users/Swu2/Documents/AADiversityIndices.R")
+knitr::opts_chunk$set(fig.width=9, fig.height=12)
+library(dplyr)
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(Biostrings)
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+
+#vaccine 3D7 strain
+vax3D7 <- "LSSDGSRVTTQARIEKPKQQPTLPTLAQETQPQQQQQQKEVGSGIGAEQKVESARPGAEVSQSDVERAGRSSGTGGSVGTKISPG"  #85 bases
+
+#load SERA2 data and clinical and parasite indicator files
+setwd("T:/vaccine/rtss_malaria_sieve/")
+SERA2.data <- read_tsv("qdata/sequences/SERA2.tsv")
+marks.data.x <- read_tsv("adata/marks_data_x_sites.tsv")  #parasite positive cases
+marks.data.c <- read_tsv("adata/marks_data_c_sites.tsv")  #clinical malaria cases
+
+#subset for subjects age 5-17 months, separated into placebo and vaccine
+clinical.data <- read_csv("adata/RTSSclinicalData.csv")
+clinical.data <- subset(clinical.data, ageCateg=="[5-17] months")
+clinical.placebo <- subset(clinical.data, vaccine==0)
+clinical.vaccine <- subset(clinical.data, vaccine==1)
+
+#SERA2 data for all participants age 5-17 months, as well as separated into vaccine and placebo groups
+SERA2.all <- SERA2.data[SERA2.data$subject %in% clinical.data$id,]
+SERA2.placebo <- SERA2.data[SERA2.data$subject %in% clinical.placebo$id,]
+SERA2.vaccine <- SERA2.data[SERA2.data$subject %in% clinical.vaccine$id,]
+
+#number of distinct subjects in SERA2 data for participants age 5-17 months
+subjects.SERA2 <- SERA2.all %>% distinct(subject)
+subjects.SERA2 <- subjects.SERA2$subject
+
+#number of distinct subjects in SERA2 placebo group for participants age 5-17 months
+subjects.placebo <- SERA2.placebo %>% distinct(subject)
+subjects.placebo <- subjects.placebo$subject
+
+#number of distinct subjects in SERA2 vaccine group for participants age 5-17 months
+subjects.vaccine <- SERA2.vaccine %>% distinct(subject)
+subjects.vaccine <- subjects.vaccine$subject
+
+#cases of clinical malaria for SERA2 placebo subjects aged 5-17 months
+clinical <- SERA2.data[SERA2.data$subject %in% subjects.placebo,]
+clinical <- clinical[clinical$sample %in% marks.data.c$sample,]
+
+#cases of parasite positivity for SERA2 placebo subjects aged 5-17 months
+parasitepos <- SERA2.data[SERA2.data$subject %in% subjects.placebo,]
+parasitepos <- parasitepos[parasitepos$sample %in% marks.data.x$sample,]
+
+#cases of both clinical malaria and parasite positivity for SERA2 placebo subjects aged 5-17 months
+both <- clinical[clinical$subject %in% parasitepos$subject,]
+both <- both[,1:11]
+
+#number of distinct subjects with both clinical and parasite endpoints 
+#for SERA2 placebo subjects aged 5-17 months
+subjects.both <- both %>% distinct(subject)
+subjects.both <- subjects.both$subject
+
+# #number of distinct subjects
+# n_distinct(clinical$subject)  #923
+# n_distinct(parasitepos$subject)  #213
+# n_distinct(both$subject)   #154
+```
+
+### Comparison plots
+**x = days between clinical malaria and parasite positive endpoint, y = parasite positive index value - clinical malaria index value. **
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#load clinical/parasite index comparisons dataframe 
+comparisons.df <- read.csv("C:/Users/Swu2/Documents/ClinicalParasiteCompSERA2", row.names = 1, header = TRUE)
+
+#add columns for the differences between parasite pos at month 20 and clinical malaria
+differences <- c("H0.diff", "H1.diff","H2.diff","CorSegSites.diff","GS.diff","Pi.diff","Mf.diff","Hamming.diff")
+comparisons.df[differences] <- NA
+for(i in 1:8){
+  comparisons.df[,(i+16)] <- comparisons.df[,(i+8)] - comparisons.df[,i]
+}
+
+#add columns for the ratios between parasite pos at month 20 and clinical malaria
+ratios <- c("H0.ratio", "H1.ratio","H2.ratio","CorSegSites.ratio","GS.ratio","Pi.ratio","Mf.ratio","Hamming.ratio")
+comparisons.df[ratios] <- NA
+for(i in 1:8){
+  comparisons.df[,(i+24)] <- comparisons.df[,(i+8)]/comparisons.df[,i]
+}
+
+#start date: 14 days after 3rd vax
+start.date <- clinical.data %>% filter(id %in% both$subject) %>% select(id, startdate)
+colnames(start.date) <- c("subject","startdate")
+#date of clinical malaria sample
+clin.date <- clinical.data %>% filter(id %in% both$subject) %>% select(id, fdate)
+colnames(clin.date) <- c("subject","clindate")
+#date of month 20 visit (parasite positivity sample)
+m20 <- clinical.data %>% filter(id %in% both$subject) %>% select(id, visitdateM20)
+colnames(m20) <- c("subject","m20")
+
+comparisons.df$subject <- as.integer(rownames(comparisons.df))
+#add date columns to comparisons.df
+comparisons.df <- left_join(comparisons.df, clin.date, by="subject")
+comparisons.df <- left_join(comparisons.df, start.date, by="subject")
+comparisons.df <- left_join(comparisons.df, m20, by="subject")
+#date difference between parasite sample and clinical malaria column
+comparisons.df$date.diff <- as.numeric(comparisons.df$m20 - comparisons.df$clindate)
+
+
+# #write comparison plot graphics to pdf 
+# pdf("C:/Users/Swu2/Documents/parasite.pdf")
+p1 <- ggplot(comparisons.df, aes(x=date.diff, y=H0.diff)) + geom_point() + stat_smooth(method = loess)
+p2 <- ggplot(comparisons.df, aes(x=date.diff, y=H1.diff)) + geom_point() + stat_smooth(method = loess)
+p3 <- ggplot(comparisons.df, aes(x=date.diff, y=H2.diff)) + geom_point() + stat_smooth(method = loess)
+p4 <- ggplot(comparisons.df, aes(x=date.diff, y=CorSegSites.diff)) + geom_point() + stat_smooth(method = loess)
+p5 <- ggplot(comparisons.df, aes(x=date.diff, y=GS.diff)) + geom_point() + stat_smooth(method = loess)
+p6 <- ggplot(comparisons.df, aes(x=date.diff, y=Pi.diff)) + geom_point() + stat_smooth(method = loess)
+p7 <- ggplot(comparisons.df, aes(x=date.diff, y=Mf.diff)) + geom_point() + stat_smooth(method = loess)
+p8 <- ggplot(comparisons.df, aes(x=date.diff, y=Hamming.diff)) + geom_point() + stat_smooth(method = loess)
+grid.arrange(p1,p2,p3,p4, nrow=2)
+grid.arrange(p5,p6,p7,p8, nrow=2)
+# dev.off()
+
+# for(i in 1:8){
+# #print(t.test(comparisons.df[,i],comparisons.df[,i+8], alternative="two.sided", paired=TRUE))
+# print(summary(comparisons.df[,i+16]))
+# }
+```
+
+###Comparing changes in number of haplotypes and number of reads between clinical malaria samples and parasite positivity samples 
+
+**Clinical malaria cases (top row is number of haplotypes, bottom row is number of reads)**
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#haplotype and reads summary
+#clinical cases
+num.haplotypes <- numeric(length(subjects.both))
+num.reads <- numeric(length(subjects.both))
+for(i in 1:length(subjects.both)){
+  sub <- subjects.both[i]
+  data <- clinical %>% filter(subject==sub) %>% select(pep_sequence, reads)
+  count <- as.vector(data$reads)
+  #fringe-trimming
+  cutoff <- qbinom(0.9, size=sum(count), prob = 0.01, lower.tail=TRUE)
+  for(j in 1:length(count)){
+    if(count[j] < cutoff){
+      count[j] <- NA
+    }
+  }
+  count <- na.omit(count)
+  num.haplotypes[i] <- length(count)
+  num.reads[i] <- sum(count)
+}
+summary(num.haplotypes)
+summary(num.reads)
+```
+
+**Parasite positivity cases**
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#parasite positive cases
+num.haplotypes <- numeric(length(subjects.both))
+num.reads <- numeric(length(subjects.both))
+for(i in 1:length(subjects.both)){
+  sub <- subjects.both[i]
+  data <- parasitepos %>% filter(subject==sub) %>% select(pep_sequence, reads)
+  count <- as.vector(data$reads)
+  #fringe-trimming
+  cutoff <- qbinom(0.9, size=sum(count), prob = 0.01, lower.tail=TRUE)
+  for(j in 1:length(count)){
+    if(count[j] < cutoff){
+      count[j] <- NA
+    }
+  }
+  count <- na.omit(count)
+  num.haplotypes[i] <- length(count)
+  num.reads[i] <- sum(count)
+}
+summary(num.haplotypes)
+summary(num.reads)
+```
+
+###Summary statistics comparison between clinical and parasite samples
+**"mean.c" refers to the mean value over clinical samples. "mean.x" refers to mean value over parasite samples. Compare adjacent rows to compare clinical with parasite.**
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+##summary stats comparison
+mean.c <- apply(comparisons.df[1:8], 2, function(x) mean(x))
+mean.x <- apply(comparisons.df[9:16], 2, function(x) mean(x))
+min.c <- apply(comparisons.df[1:8], 2, function(x) min(x))
+min.x <- apply(comparisons.df[9:16], 2, function(x) min(x))
+max.c <- apply(comparisons.df[1:8], 2, function(x) max(x))
+max.x <- apply(comparisons.df[9:16], 2, function(x) max(x))
+median.c <- apply(comparisons.df[1:8], 2, function(x) median(x))
+median.x <- apply(comparisons.df[9:16], 2, function(x) median(x))
+sd.c <- apply(comparisons.df[1:8], 2, function(x) sd(x))
+sd.x <- apply(comparisons.df[9:16], 2, function(x) sd(x))
+IQR.c <- apply(comparisons.df[1:8], 2, function(x) IQR(x))
+IQR.x <- apply(comparisons.df[9:16], 2, function(x) IQR(x))
+
+df <- data.frame(mean.c, mean.x, min.c, min.x, max.c, max.x, median.c, median.x, sd.c, sd.x, IQR.c, IQR.x)
+rownames(df) <- c("H(0)","H(1)","H(2)","CorSegSites","GS","Rao","Mf","Hamming")
+
+t(df)
+
+pp <- t(df[,c(2,4,6,8,10,12)])
+clin <- t(df[, c(1,3,5,7,9,11)])
+new <- as.data.frame(rbind(clin, pp))
+new$stat <- rep(c("mean","min","max","median","sd","IQR"),times=2)
+new$label <- c(rep("clin", times=6), rep("pp", times=6))
+new <- melt(new)
+ggplot(new, aes(y=value, x=stat, color=label, fill=label)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  facet_wrap(~variable, scale="free")
+```
+
+###Histogram and boxplot comparison between clinical samples and parasite samples
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+###Histogram and boxplot comparison
+clin <- comparisons.df[,1:8]
+clin$label <- "clinical"
+pp <- comparisons.df[,9:16]
+pp$label <- "parasite"
+colnames(pp) <- colnames(clin)
+combined <- rbind(clin, pp)
+colnames(combined) <- c("H0","H1","H2","CorSegSites","GS","Rao","Mf","Hamming","label")
+
+p1 <- ggplot(combined, aes(x=H0, y=..count../sum(..count..), color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p2 <- ggplot(combined, aes(x=H1, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p3 <- ggplot(combined, aes(x=H2, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p4 <- ggplot(combined, aes(x=CorSegSites, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p5 <- ggplot(combined, aes(x=GS, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p6 <- ggplot(combined, aes(x=Rao, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p7 <- ggplot(combined, aes(x=Mf, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+p8 <- ggplot(combined, aes(x=Hamming, y=..count../sum(..count..),color=label, fill=label)) + geom_histogram(position="identity", alpha=0.5) + ylab("Density")
+
+ggarrange(p1, p2, p3, p4, ncol=2, nrow=2, common.legend = TRUE, legend="top")
+ggarrange(p5, p6, p7, p8, ncol=2, nrow=2, common.legend = TRUE, legend="top")
+
+#boxplots
+boxplotdata <- melt(combined)
+ggplot(boxplotdata, aes(x=variable, y=value, fill=label)) + geom_boxplot() + facet_wrap(~variable, scale="free")
+
+```
