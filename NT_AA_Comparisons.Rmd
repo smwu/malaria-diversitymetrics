@@ -1,0 +1,198 @@
+---
+title: "Nucl AA Comparisons"
+author: "Stephanie Wu"
+date: "March 19, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+source("C:/Users/Swu2/Documents/DiversityIndices.R")
+library(dplyr)
+library(PerformanceAnalytics)
+library(corrplot)
+library(ggbiplot) 
+library(ggrepel)
+library(FactoMineR)
+library(factoextra)
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(Biostrings)
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+setwd("T:/vaccine/rtss_malaria_sieve/")
+TEP.data <- read_tsv("qdata/sequences/TEP.tsv")
+
+#subset for subjects age 5-17 months, separated into placebo and vaccine
+clinical.data <- read_csv("adata/RTSSclinicalData.csv")
+clinical.data <- subset(clinical.data, ageCateg=="[5-17] months")
+clinical.placebo <- subset(clinical.data, vaccine==0)
+clinical.vaccine <- subset(clinical.data, vaccine==1)
+
+#TEP data for all participants age 5-17 months, as well as separated into vaccine and placebo groups
+TEP.all <- TEP.data[TEP.data$subject %in% clinical.data$id,]
+TEP.placebo <- TEP.data[TEP.data$subject %in% clinical.placebo$id,]
+TEP.vaccine <- TEP.data[TEP.data$subject %in% clinical.vaccine$id,]
+
+#number of distinct subjects in TEP data for participants age 5-17 months
+subjects.TEP <- TEP.all %>% distinct(subject)
+subjects.TEP <- subjects.TEP$subject
+
+#number of distinct subjects in TEP placebo group for participants age 5-17 months
+subjects.placebo <- TEP.placebo %>% distinct(subject)
+subjects.placebo <- subjects.placebo$subject
+
+
+
+#load nucleotide placebo dataframe
+placebo.df <- read.csv("C:/Users/Swu2/Documents/placebo.df", row.names = 1, header = TRUE)
+
+#separate indices into three classes
+incidence <- placebo.df %>% select("H.0.", "PolySites", "UniqMuts", "CorSegSites")
+abundance <- placebo.df %>% select("Sh", "N.Sh", "GS", "H.1.","H.2.", "H.3.", "Ren.0.","Ren.2.","HC.3.")
+functional <- placebo.df %>% select("Mf.raw.",  
+                         "Pi.raw.",
+                         "Ratio.raw.",
+                         "FAD.raw.")
+#impute infinite values with 0
+is.na(placebo.df) <- do.call(cbind,lapply(placebo.df, is.infinite))
+placebo.df[is.na(placebo.df)] <- 0
+
+
+
+
+#load amino acid placebo dataframe
+placebo.aa.df <- read.csv("C:/Users/Swu2/Documents/placebo.aa.df", row.names = 1, header = TRUE)
+
+#impute infinite values with 0
+is.na(placebo.aa.df) <- do.call(cbind,lapply(placebo.aa.df, is.infinite))
+placebo.aa.df[is.na(placebo.aa.df)] <- 0
+
+#separate indices into three classes
+incidence.aa <- placebo.aa.df %>% select("H.0.", "PolySites", "UniqMuts", "CorSegSites")
+abundance.aa <- placebo.aa.df %>% select("Sh", "N.Sh", "GS", "H.1.","H.2.", "H.3.", "Ren.0.","Ren.2.","HC.3.")
+functional.aa <- placebo.aa.df %>% select("Mf",  
+                         "Rao",
+                         "Ratio",
+                         "FAD")
+```
+
+
+###Histogram comparisons for all indices
+Amino acid histograms for Mf, Rao, and Ratio correspond to nucleotide histograms for Mf(raw), Pi(raw), and Ratio(raw), respectively.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.width=8, fig.height=8}
+ggplot(data = melt(placebo.df), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Nucleotides")
+ggplot(data = melt(placebo.aa.df), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Amino Acids")
+```
+
+###Histogram comparison by class
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=4}
+
+ggplot(data = melt(incidence), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Nucleotides")
+ggplot(data = melt(incidence.aa), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Amino Acids")
+
+ggplot(data = melt(abundance), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Nucleotides")
+ggplot(data = melt(abundance.aa), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Amino Acids")
+
+ggplot(data = melt(functional), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Nucleotides")
+ggplot(data = melt(functional.aa), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free") + ggtitle("Histograms for Amino Acids")
+```
+
+
+###Correlation comparison by class
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=5, fig.height=4}
+suppressWarnings(chart.Correlation(incidence, histogram=TRUE, method = "spearman", pch=19, main="Nucleotides"))
+suppressWarnings(chart.Correlation(incidence.aa, histogram=TRUE, method = "spearman", pch=19, main="Amino Acids"))
+
+suppressWarnings(chart.Correlation(abundance, histogram=TRUE, method = "spearman", pch=19, main="Nucleotides"))
+suppressWarnings(chart.Correlation(abundance.aa, histogram=TRUE, method = "spearman", pch=19, main="Amino Acids"))
+
+suppressWarnings(chart.Correlation(functional, histogram=TRUE, method = "spearman", pch=19, main="Nucleotides"))
+suppressWarnings(chart.Correlation(functional.aa, histogram=TRUE, method = "spearman", pch=19, main="Amino Acids"))
+```
+
+
+###Hill numbers profile comparison. 
+Red line denotes average hill number, computed across individuals for each q.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.width=5, fig.height=4}
+
+profile <- as.data.frame(matrix(ncol = length(subjects.placebo), nrow=31))
+
+q <- c(seq(0,0.9,0.1),seq(1,1.8,0.2),seq(2,3.75,0.25),
+           seq(4,10,1),Inf)
+rownames(profile) <-q
+
+for(i in 1:length(subjects.placebo)){
+  sub <- subjects.TEP[i]
+  data <- TEP.all %>% filter(subject==sub) %>% select(nuc_sequence, reads)
+  seq <- as.vector(data$nuc_sequence)
+  count <- as.vector(data$reads)
+  profile[,i] <- qD.profile(count, q=NULL)$qD
+}
+sample <- sample(ncol(profile), size=20)
+
+q <- c(seq(0,0.9,0.1),seq(1,1.8,0.2),seq(2,3.75,0.25),
+           seq(4,10,1),Inf)
+
+average <- apply(profile, 1, function(x) mean(x))
+
+#Hill profile plot up to q=5
+plot(q[1:25], average[1:25],type="l", xlab="q", ylab="Hill Numbers", ylim=c(0,5), col="red", lwd=2, main="Nucleotide Hill Profile")
+for(i in 1:20){
+  lines(q[1:25], profile[1:25, sample[i]])
+}
+
+
+###AA version
+profile.aa <- as.data.frame(matrix(ncol = length(subjects.placebo), nrow=31))
+
+q <- c(seq(0,0.9,0.1),seq(1,1.8,0.2),seq(2,3.75,0.25),
+           seq(4,10,1),Inf)
+rownames(profile.aa) <-q
+for(i in 1:length(subjects.placebo)){
+  sub <- subjects.TEP[i]
+  data <- TEP.all %>% filter(subject==sub) %>% select(pep_sequence, reads)
+  seq <- as.vector(data$pep_sequence)
+  count <- as.vector(data$reads)
+  profile.aa[,i] <- qD.profile(count, q=NULL)$qD
+}
+
+q <- c(seq(0,0.9,0.1),seq(1,1.8,0.2),seq(2,3.75,0.25),
+           seq(4,10,1),Inf)
+
+average <- apply(profile.aa, 1, function(x) mean(x))
+
+#Hill profile plot up to q=5
+plot(q[1:25], average[1:25],type="l", xlab="q", ylab="Hill Numbers", ylim=c(0,5), col="red", lwd=2, main="AA Hill profile")
+for(i in 1:20){
+  lines(q[1:25], profile.aa[1:25, sample[i]])
+}
+
+```
+
+The plots are essentially the same, which suggests the 20 sampled subjects have the same hill number profile regardless of whether we examine nucleotide sequences or amino acid sequences.
+
+###Appendix
+```{r ref.label=knitr::all_labels(), eval=FALSE, echo=TRUE}
+
+```
+
