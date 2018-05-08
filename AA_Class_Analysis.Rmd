@@ -1,0 +1,344 @@
+---
+title: "Class Analysis AA"
+author: "Stephanie Wu"
+date: "March 12, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=8, fig.height=8)
+library(dplyr)
+library(PerformanceAnalytics)
+library(corrplot)
+library(ggbiplot) 
+library(ggrepel)
+library(FactoMineR)
+library(factoextra)
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(Biostrings)
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#load data frames
+TEP.aa.df <- read.csv("C:/Users/Swu2/Documents/TEP.aa.df", row.names = 1, header = TRUE)
+placebo.aa.df <- read.csv("C:/Users/Swu2/Documents/placebo.aa.df", row.names = 1, header = TRUE)
+colnames(TEP.aa.df) <- c("Sh", "N.Sh", 
+                         "GS",
+                         "H(0)","H(1)","H(2)", "H(3)",
+                         "Ren(0)","Ren(2)","HC(3)",
+                         "PolySites","UniqMuts", "CorSegSites",
+                         "Mf",  
+                         "Rao",
+                         "Ratio",
+                         "FAD")
+
+#impute infinite values with 0
+is.na(TEP.aa.df) <- do.call(cbind,lapply(TEP.aa.df, is.infinite))
+TEP.aa.df[is.na(TEP.aa.df)] <- 0
+
+#separate indices into three classes
+incidence <- TEP.aa.df %>% select("H(0)", "PolySites", "UniqMuts", "CorSegSites")
+abundance <- TEP.aa.df %>% select("Sh", "N.Sh", "GS", "H(1)","H(2)", "H(3)", "Ren(0)","Ren(2)","HC(3)")
+functional <- TEP.aa.df %>% select("Mf",  
+                         "Rao",
+                         "Ratio",
+                         "FAD")
+#separate data into vaccine and placebo
+incidence.placebo <- incidence %>% filter(rownames(TEP.aa.df) %in% rownames(placebo.aa.df))
+incidence.vaccine <- incidence %>% filter(!(rownames(TEP.aa.df) %in% rownames(placebo.aa.df)))
+abundance.placebo <- abundance %>% filter(rownames(TEP.aa.df) %in% rownames(placebo.aa.df))
+abundance.vaccine <- abundance %>% filter(!(rownames(TEP.aa.df) %in% rownames(placebo.aa.df)))
+functional.placebo <- functional %>% filter(rownames(TEP.aa.df) %in% rownames(placebo.aa.df))
+functional.vaccine <- functional %>% filter(!(rownames(TEP.aa.df) %in% rownames(placebo.aa.df)))
+```
+
+###Correlations
+**Incidence**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=5, fig.width=5}
+#chart of correlations
+suppressWarnings(chart.Correlation(incidence, histogram=TRUE, method = "spearman", pch=19))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=5, fig.width=5}
+corrplot(cor(incidence, method="spearman"), order="hclust")
+```
+
+
+**Abundance**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6.5, fig.width=6.5}
+suppressWarnings(chart.Correlation(abundance, histogram=TRUE, method = "spearman", pch=19))
+```
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6.5, fig.width=6.5}
+corrplot(cor(abundance, method="spearman"), order="hclust")
+```
+
+
+**Functional**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(data = melt(functional), mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = "free")
+```
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.height=9, fig.width=9}
+corrplot(cor(functional, method = "spearman"), order="hclust")
+
+suppressWarnings(chart.Correlation(functional, histogram=TRUE, method = "spearman", pch=19))
+```
+
+
+
+###Standard deviations (Standardized)
+**Incidence**
+$sd\left(\frac{x}{max(|x|)}\right)$ and $sd\left(\frac{x-min(x)}{max(x)-min(x)}\right)$, respectively.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#standardized standard deviations
+sort(apply(incidence, 2, function(x) sd(x/max(abs(x)))), decreasing=TRUE)
+sort(apply(incidence, 2, function(x) sd((x-min(x))/(max(x)-min(x)))), decreasing=TRUE)
+```
+
+
+**Abundance**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+sort(apply(abundance, 2, function(x) sd(x/max(abs(x)))), decreasing=TRUE)
+sort(apply(abundance, 2, function(x) sd((x-min(x))/(max(x)-min(x)))), decreasing=TRUE)
+```
+
+
+**Functional**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+sort(apply(functional, 2, function(x) sd(x/max(abs(x)))), decreasing=TRUE)
+sort(apply(functional, 2, function(x) sd((x-min(x))/(max(x)-min(x)))), decreasing=TRUE)
+```
+
+
+
+###PCA (Standardized)
+**Incidence**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pca.scree <- function(class.data){
+  pca <- PCA(class.data, scale.unit=TRUE, graph=FALSE)
+  fviz_eig(pca, addlabels=TRUE, main="Scree plot for Standardized PCA")
+}
+pca.stand <- function(class.data){
+  pca <- PCA(class.data, scale.unit=TRUE, graph=FALSE)
+  #contributions of variables to the first principal component
+  p1 <- fviz_contrib(pca, choice="var", axes=1, title="PC 1")
+  p2 <- fviz_contrib(pca, choice="var", axes=2, title="PC 2")
+  p3 <- fviz_contrib(pca, choice="var", axes=3, title="PC 3")
+  #output
+  grid.arrange(p1,p2,p3, ncol=2, nrow=2)
+  
+  fviz_pca_biplot(pca,
+                  title="Standardized PCA Biplot ",
+                  #Individuals
+                  geom.ind = "point", pointshape=21, pointsize = 2,
+                  #Variables
+                  col.var = "darkblue",label = "var", repel=TRUE
+  )
+}
+
+pca.scree(incidence)
+
+pca.stand(incidence)
+```
+
+
+**Abundance**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pca.scree(abundance)
+
+pca.stand(abundance)
+```
+
+
+**Functional**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pca.scree(functional)
+
+pca.stand(functional)
+
+```
+
+
+
+###Significance Tests
+**Incidence**
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+significance <- function(vaccine, placebo, x, y) {
+  
+  index.signif <- data.frame(matrix(ncol = 4, nrow = ncol(placebo)))
+  rownames(index.signif) <- c(colnames(placebo)) 
+  colnames(index.signif) <- c("P_t", "Q_t", "P_w", "Q_w")
+  
+  #t-test for indices
+  for(i in 1:ncol(placebo)){
+    index.signif[i,1] <- t.test(vaccine[,i], placebo[,i])$p.value
+  }
+  
+  #wilcoxon rank-sum test for indices
+  for(i in 1:ncol(placebo)){
+    index.signif[i,3] <- wilcox.test(vaccine[,i], placebo[,i], alternative = "two.sided")$p.value
+  }
+  
+  #adjusted p-values
+  index.signif[,2] <- p.adjust(index.signif$P_t, method="fdr") #control false discovery rate
+  index.signif[,4] <- p.adjust(index.signif$P_w, method="fdr") #control false discovery rate
+  
+  
+  
+  indices.sorted.t <- index.signif[order(index.signif$P_t),]
+  indices.sorted.w <- index.signif[order(index.signif$P_w),]
+  
+  indices.sorted.t$names <- rownames(indices.sorted.t)
+  indices.sorted.w$names <- rownames(indices.sorted.w)
+  
+  #graphic
+  Order <- order(indices.sorted.w$P_w)
+  Order <- indices.sorted.w$names[Order]
+  Order <- rev(Order)
+  indices.sorted.w$names <- factor(indices.sorted.w$names, levels=Order)
+  breaks=10^(seq(-21,-1,5))
+  library("scales")
+  reverselog_trans <- function(base = exp(1)) {
+    trans <- function(x) -log(x, base)
+    inv <- function(x) base^(-x)
+    trans_new(paste0("reverselog-", format(base)), trans, inv, 
+              log_breaks(base = base), 
+              domain = c(1e-20, Inf))
+  }
+  q.signif <- ifelse(indices.sorted.w$Q_w > 0.2, "black","red")
+  p.signif <- ifelse(indices.sorted.w$P_w > 0.05, "black","red")
+  
+  gg <- ggplot(indices.sorted.w, aes(names, P_w)) + 
+    geom_segment(aes(xend = names, yend=1), color="grey77",lwd=1,lineend = "round") + 
+    geom_point(size=3,aes(names, P_w), color=p.signif, shape=16) + 
+    geom_point(data=indices.sorted.w, aes(names, Q_w), color = q.signif, shape=21, size=3) +
+    scale_color_manual(values=c("black", "red"), labels=c("No","Yes"), name="Significance") +
+    scale_shape_manual(values=c(16,21), labels=c("P-values","Q-values")) + 
+    scale_x_discrete("Index", expand=c(0,2)) + 
+    scale_y_continuous("P-value", trans = reverselog_trans(10), breaks=c(1,0.2,0.05,0.01,0.001), labels = c(1,0.2, 0.05,0.01,0.001)) +
+    coord_flip() +
+    ggtitle("Vaccine vs. Placebo Wilcoxon-Test P-values") + 
+    theme_classic() + 
+    annotate("text",x= x, y=y, label="Dot=P-value \n Circle=Q-value \n Red = Significant", size=4) + 
+    theme(panel.grid.major.x = element_line(color="gray",linetype = 3),
+          text = element_text(size=15),
+          plot.title=element_text(vjust=1), 
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  print(gg)
+  
+  
+  Order <- order(indices.sorted.t$P_t)
+  Order <- indices.sorted.t$names[Order]
+  Order <- rev(Order)
+  indices.sorted.t$names <- factor(indices.sorted.t$names, levels=Order)
+  breaks=10^(seq(-21,-1,5))
+  library("scales")
+  reverselog_trans <- function(base = exp(1)) {
+    trans <- function(x) -log(x, base)
+    inv <- function(x) base^(-x)
+    trans_new(paste0("reverselog-", format(base)), trans, inv, 
+              log_breaks(base = base), 
+              domain = c(1e-20, Inf))
+  }
+  q.signif <- ifelse(indices.sorted.t$Q_t > 0.2, "black","red")
+  p.signif <- ifelse(indices.sorted.t$P_t > 0.05, "black","red")
+  
+  gg <- ggplot(indices.sorted.t, aes(names, P_t)) + 
+    
+    geom_segment(aes(xend = names, yend=1), color="grey77",lwd=1,lineend = "round") + 
+    geom_point(size=3,aes(names, P_t), color=p.signif, shape=16) + 
+    geom_point(data=indices.sorted.t, aes(names, Q_t), color = q.signif, shape=21, size=3) +
+    scale_color_manual(values=c("black", "red"), labels=c("No","Yes"), name="Significance") +
+    scale_shape_manual(values=c(16,21), labels=c("P-values","Q-values")) + 
+    scale_x_discrete("Index", expand=c(0,2)) + 
+    scale_y_continuous("P-value", trans = reverselog_trans(10), breaks=c(1,0.2,0.05,0.01,0.001), labels = c(1,0.2, 0.05,0.01,0.001)) +
+    coord_flip() +
+    ggtitle("Vaccine vs. Placebo T-Test P-values") + 
+    theme_classic() + 
+    annotate("text",x= x, y=y, label="Dot=P-value \n Circle=Q-value \n Red = Significant", size=4) + 
+    theme(panel.grid.major.x = element_line(color="gray",linetype = 3),
+          text = element_text(size=15),
+          plot.title=element_text(vjust=1), 
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  print(gg)
+  indices.sorted.w
+}
+
+significance(incidence.vaccine, incidence.placebo, 4.4, 1e-6)
+```
+
+
+**Abundance**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+significance(abundance.vaccine, abundance.placebo, 4.4, 1e-8)
+```
+
+
+**Functional**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+significance(functional.vaccine, functional.placebo, 4.4, 1e-6)
+
+```
+
+
+
+###Boxplots
+**Incidence**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#boxplots
+boxplots <- function(class.data){
+  placebo <- ifelse(rownames(class.data) %in% rownames(placebo.aa.df), "placebo", "vaccine")
+  boxplot<- melt(class.data)
+  boxplot <- cbind(boxplot, placebo)
+  
+  ggplot(boxplot, aes(x=variable, y=value, fill=placebo)) +
+    geom_boxplot() +
+    facet_wrap(~variable, scale="free") 
+}
+boxplots(incidence)
+```
+
+
+**Abundance**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+boxplots(abundance)
+```
+
+
+**Functional**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+boxplots(functional)
+```
+
+
+###Appendix
+```{r ref.label=knitr::all_labels(), eval=FALSE, echo=TRUE}
+
+```
+
