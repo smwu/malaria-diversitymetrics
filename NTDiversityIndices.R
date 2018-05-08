@@ -578,7 +578,7 @@ sq.diversity2 <- function(seqs,nr,frame=-1)
   ab.div["Mstr"] <- nr[1]
   ab.div["Mpct"] <- round(nr[1]/sum(nr)*100,2)
 
-  ###  Si només hi ha un sol haplotip
+  ###  If there is only one haplotype
   if( length(nr) < 2 )  
    return(list(inc.div=inc.div,ab.div=ab.div,FAD=FAD,Mf=Mf,Pi=Pi,Ratio=Ratio))
    

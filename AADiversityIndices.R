@@ -5,7 +5,7 @@ library(RColorBrewer)
 
 ######################################################################
 ###    ANALYSIS BY ALIGNMENT COLUMNS (positions)
-
+### Amino acid abbreviations
 nt.nms <- c("A","R","N","D","C","Q","E","G","H","I","L","K","M",
             "F","P","S","T","W","Y","V")
 
