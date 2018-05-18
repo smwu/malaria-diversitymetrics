@@ -340,10 +340,27 @@ vaccine.aa.fringe[is.na(vaccine.aa.fringe)] <- 0
 write.csv(vaccine.aa.fringe, "C:/Users/Swu2/Documents/vaccine.aa.fringe")
 
 #==================================Clinical/parasite comparisons==========================
+#cases of clinical malaria for TEP placebo subjects aged 5-17 months
+clinical <- TEP.data[TEP.data$subject %in% subjects.placebo,]
+clinical <- clinical[clinical$sample %in% marks.data.c$sample,]
+
+#cases of parasite positivity for TEP placebo subjects aged 5-17 months
+parasitepos <- TEP.data[TEP.data$subject %in% subjects.placebo,]
+parasitepos <- parasitepos[parasitepos$sample %in% marks.data.x$sample,]
+
+#cases of both clinical malaria and parasite positivity for TEP placebo subjects aged 5-17 months
+both <- clinical[clinical$subject %in% parasitepos$subject,]
+both <- both[,1:11]
+
+#number of distinct subjects with both clinical and parasite endpoints 
+#for TEP placebo subjects aged 5-17 months
+subjects.both <- both %>% distinct(subject)
+subjects.both <- subjects.both$subject
+
 #create dataframe of clinical vs. parasite pos comparisons for select indices
 comparisons.df <- data.frame(matrix(ncol = 16, nrow = length(subjects.both)))
-colnames(comparisons.df) <- c("H0.c", "H1.c","H2.c","CorSegSites.c","GS.c","Pi.c","Mf.c","Hamming.c",
-                              "H0.x", "H1.x","H2.x","CorSegSites.x","GS.x","Pi.x","Mf.x","Hamming.x")
+colnames(comparisons.df) <- c("H0.c", "H1.c","H2.c","CorSegSites.c","PiWt.c","PiEq.c","HamWt.c","HamEq.c",
+                              "H0.x", "H1.x","H2.x","CorSegSites.x","PiWt.x","PiEq.x","HamWt.x","HamEq.x")
 
 for(i in 1:length(subjects.both)){
   sub <- subjects.both[i]
@@ -364,10 +381,12 @@ for(i in 1:length(subjects.both)){
   bseqs <- AAStringSet(seq)
   psa <- pairwiseAlignment(pattern=bseqs,subject=vax3D7)
   nm <- nmismatch(psa)
+  dst <- stringDist(seq)
   #calculate indices
-  comparisons.df[i,1:8] <- c(qD(count,0), qD(count,1), qD(count,2), AA.correct.seg.sites(seq, count),
-                             GiniSimpson(count), Aa.sq.diversity(seq,count,nm)$Rao, Aa.sq.diversity(seq,count,nm)$Mf, 
-                             mean(nm))
+  comparisons.df[i,1:8] <- c(qD(count,0), qD(count,1), qD(count,2), 
+                             AA.correct.seg.sites(seq, count),
+                             rao.aa(count, dst), pi.aa(count,dst),  #Pi
+                             sum(nm*count)/sum(count), mean(nm))  #Hamming distances
   #parasite positive cases
   data <- parasitepos %>% filter(subject==sub) %>% select(pep_sequence, reads)
   seq <- as.vector(data$pep_sequence)
@@ -385,10 +404,12 @@ for(i in 1:length(subjects.both)){
   bseqs <- AAStringSet(seq)
   psa <- pairwiseAlignment(pattern=bseqs,subject=vax3D7)
   nm <- nmismatch(psa)
+  dst <- stringDist(seq)
   #calculate indices
-  comparisons.df[i,9:16] <- c(qD(count,0), qD(count,1), qD(count,2), AA.correct.seg.sites(seq, count),
-                              GiniSimpson(count), Aa.sq.diversity(seq,count,nm)$Rao, Aa.sq.diversity(seq,count,nm)$Mf, 
-                              mean(nm))
+  comparisons.df[i,9:16] <- c(qD(count,0), qD(count,1), qD(count,2), 
+                              AA.correct.seg.sites(seq, count),
+                              rao.aa(count, dst), pi.aa(count,dst), 
+                              sum(nm*count)/sum(count), mean(nm))
 }
 rownames(comparisons.df) <- subjects.both
 
@@ -469,10 +490,28 @@ comps[is.na(comps)] <- 0
 write.csv(comps, "C:/Users/Swu2/Documents/Comps")
 
 #==================================Clinical/parasite comparisons for vaccinees==========================
+#cases of clinical malaria for TEP placebo subjects aged 5-17 months
+clinical <- TEP.data[TEP.data$subject %in% subjects.vaccine,]
+clinical <- clinical[clinical$sample %in% marks.data.c$sample,]
+
+#cases of parasite positivity for TEP placebo subjects aged 5-17 months
+parasitepos <- TEP.data[TEP.data$subject %in% subjects.vaccine,]
+parasitepos <- parasitepos[parasitepos$sample %in% marks.data.x$sample,]
+
+#cases of both clinical malaria and parasite positivity for TEP placebo subjects aged 5-17 months
+both <- clinical[clinical$subject %in% parasitepos$subject,]
+both <- both[,1:11]
+
+#number of distinct subjects with both clinical and parasite endpoints 
+#for TEP placebo subjects aged 5-17 months
+subjects.both <- both %>% distinct(subject)
+subjects.both <- subjects.both$subject
+
+
 #create dataframe of clinical vs. parasite pos comparisons for select indices
 comparisons.df <- data.frame(matrix(ncol = 16, nrow = length(subjects.both)))
-colnames(comparisons.df) <- c("H0.c", "H1.c","H2.c","CorSegSites.c","GS.c","Pi.c","Mf.c","Hamming.c",
-                              "H0.x", "H1.x","H2.x","CorSegSites.x","GS.x","Pi.x","Mf.x","Hamming.x")
+colnames(comparisons.df) <- c("H0.c", "H1.c","H2.c","CorSegSites.c","PiWt.c","PiEq.c","HamWt.c","HamEq.c",
+                              "H0.x", "H1.x","H2.x","CorSegSites.x","PiWt.x","PiEq.x","HamWt.x","HamEq.x")
 
 for(i in 1:length(subjects.both)){
   sub <- subjects.both[i]
@@ -493,10 +532,12 @@ for(i in 1:length(subjects.both)){
   bseqs <- AAStringSet(seq)
   psa <- pairwiseAlignment(pattern=bseqs,subject=vax3D7)
   nm <- nmismatch(psa)
+  dst <- stringDist(seq)
   #calculate indices
-  comparisons.df[i,1:8] <- c(qD(count,0), qD(count,1), qD(count,2), AA.correct.seg.sites(seq, count),
-                             GiniSimpson(count), Aa.sq.diversity(seq,count,nm)$Rao, Aa.sq.diversity(seq,count,nm)$Mf, 
-                             mean(nm))
+  comparisons.df[i,1:8] <- c(qD(count,0), qD(count,1), qD(count,2), 
+                             AA.correct.seg.sites(seq, count),
+                             rao.aa(count, dst), pi.aa(count,dst),  #Pi
+                             sum(nm*count)/sum(count), mean(nm))  #Hamming distances
   #parasite positive cases
   data <- parasitepos %>% filter(subject==sub) %>% select(pep_sequence, reads)
   seq <- as.vector(data$pep_sequence)
@@ -514,10 +555,12 @@ for(i in 1:length(subjects.both)){
   bseqs <- AAStringSet(seq)
   psa <- pairwiseAlignment(pattern=bseqs,subject=vax3D7)
   nm <- nmismatch(psa)
+  dst <- stringDist(seq)
   #calculate indices
-  comparisons.df[i,9:16] <- c(qD(count,0), qD(count,1), qD(count,2), AA.correct.seg.sites(seq, count),
-                              GiniSimpson(count), Aa.sq.diversity(seq,count,nm)$Rao, Aa.sq.diversity(seq,count,nm)$Mf, 
-                              mean(nm))
+  comparisons.df[i,9:16] <- c(qD(count,0), qD(count,1), qD(count,2), 
+                              AA.correct.seg.sites(seq, count),
+                              rao.aa(count, dst), pi.aa(count,dst), 
+                              sum(nm*count)/sum(count), mean(nm))
 }
 rownames(comparisons.df) <- subjects.both
 
