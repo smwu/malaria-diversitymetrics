@@ -1,0 +1,153 @@
+---
+title: "Paired Plots Comparing Clinical Malaria Endpoint vs. Parasite Positivity Endpoint"
+author: "Stephanie Wu"
+date: "May 14, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+source("C:/Users/Swu2/Documents/AADiversityIndices.R")
+knitr::opts_chunk$set(fig.width=8.5, fig.height=11)
+library(dplyr)
+library(readr)
+library(ape)
+library(ade4)
+library(seqinr)
+library(RColorBrewer)
+library(Biostrings)
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+#load clinical/parasite index comparisons dataframe for TEP placebo
+comparisons.df <- read.csv("C:/Users/Swu2/Documents/ClinicalParasiteComp", row.names = 1, header = TRUE)
+#add columns for the differences between parasite pos at month 20 and clinical malaria
+differences <- c("H0.diff", "H1.diff","H2.diff","CorSegSites.diff","PiWt.diff","PiEq.diff","HamWt.diff","HamEq.diff")
+comparisons.df[differences] <- NA
+for(i in 1:8){
+  comparisons.df[,(i+16)] <- comparisons.df[,(i+8)] - comparisons.df[,i]
+}
+
+# load TEP vaccine dataframe
+comparisons.vax <- read.csv("C:/Users/Swu2/Documents/ClinicalParasiteCompVax", row.names = 1, header = TRUE)
+differences <- c("H0.diff", "H1.diff","H2.diff","CorSegSites.diff","PiWt.diff","PiEq.diff","HamWt.diff","HamEq.diff")
+comparisons.vax[differences] <- NA
+for(i in 1:8){
+  comparisons.vax[,(i+16)] <- comparisons.vax[,(i+8)] - comparisons.vax[,i]
+}
+
+# load SERA2 placebo dataframe
+comparisons.sera <- read.csv("C:/Users/Swu2/Documents/ClinicalParasiteCompSERA2", row.names = 1, header = TRUE)
+differences <- c("H0.diff", "H1.diff","H2.diff","CorSegSites.diff","PiWt.diff","PiEq.diff","HamWt.diff","HamEq.diff")
+comparisons.sera[differences] <- NA
+for(i in 1:8){
+  comparisons.sera[,(i+16)] <- comparisons.sera[,(i+8)] - comparisons.sera[,i]
+}
+
+# load SERA2 vaccine dataframe
+comparisons.sera.vax <- read.csv("C:/Users/Swu2/Documents/ClinicalParasiteCompSERA2Vax", row.names = 1, header = TRUE)
+differences <- c("H0.diff", "H1.diff","H2.diff","CorSegSites.diff","PiWt.diff","PiEq.diff","HamWt.diff","HamEq.diff")
+comparisons.sera.vax[differences] <- NA
+for(i in 1:8){
+  comparisons.sera.vax[,(i+16)] <- comparisons.sera.vax[,(i+8)] - comparisons.sera.vax[,i]
+}
+
+## paired plots function
+pairedPlots <- function(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, index.c, index.x, index.diff){
+  
+  ## TEP placebo
+      # scatterplot c vs. x
+      p1 <- ggplot(comparisons.df, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess) + geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      # dotplot and boxplot comparing c and x
+      p2 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none") + xlab("TEP Placebo")
+      # scatterplot c vs. x-c
+      p3 <- ggplot(comparisons.df, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
+  
+  ## TEP vaccine
+      # scatterplot c vs. x
+      p4 <- ggplot(comparisons.vax, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      # dotplot and boxplot comparing c and x
+      p5 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("TEP Vaccine")
+      # scatterplot c vs. x-c
+      p6 <- ggplot(comparisons.vax, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
+  
+  ## SERA2 placebo
+      # scatterplot c vs. x
+      p7 <- ggplot(comparisons.sera, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      # dotplot and boxplot comparing c and x
+      p8 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("SERA2 Placebo")
+      # scatterplot c vs. x-c
+      p9 <- ggplot(comparisons.sera, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
+  
+  ## SERA2 vaccine
+      # scatterplot c vs. x
+      p10 <- ggplot(comparisons.sera.vax, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      # dotplot and boxplot comparing c and x
+      p11 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("SERA2 Vaccine")
+      # scatterplot c vs. x-c
+      p12 <- ggplot(comparisons.sera.vax, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
+  
+  grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12, nrow=4, ncol=3)
+}
+```
+**H0: Hill number with q=0**  
+Number of haplotypes  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H0.c", "H0.x", "H0.diff")
+#boxplot(comparisons.sera.vax$H0.c)
+``` 
+
+    
+**H1: Hill number with q=1**  
+Exponential of Shannon entropy  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H1.c", "H1.x", "H1.diff")
+```
+
+    
+**H2: Hill number with q=2**  
+Inverse of Simpson index    
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H2.c", "H2.x", "H2.diff")
+```
+  
+  
+**CorSegSites: Corrected Segregating Sites**  
+$\frac{S}{a_1}$ where $S$ is the number of polymorphic sites and $a_1 =\sum\limits_{i=1}^{n-1}\frac{1}{i}$, with $n =$ the number of reads  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "CorSegSites.c", "CorSegSites.x", "CorSegSites.diff")
+```
+  
+    
+**PiWt: AA diversity, $\pi$, weighted by haplotype frequency**  
+Average Hamming distance between any two haplotypes, taking haplotype frequency into consideration  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "PiWt.c", "PiWt.x", "PiWt.diff")
+```
+  
+    
+**PiEq: AA diversity, $\pi$, haplotypes weighted equally**  
+Average Hamming distance between any two haplotypes  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "PiEq.c", "PiEq.x", "PiEq.diff")
+```
+  
+    
+**HamWt: Hamming distance, weighted by haplotype frequency**  
+Average Hamming distance from 3D7 vaccine strain, taking haplotype frequency into consideration  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "HamWt.c", "HamWt.x", "HamWt.diff")
+```
+  
+    
+**HamEq: Hamming distance, haplotypes weighted equally**  
+Average Hamming distance from 3D7 vaccine strain  
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "HamEq.c", "HamEq.x", "HamEq.diff")
+```
