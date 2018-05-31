@@ -115,7 +115,8 @@ comparisons.df <- left_join(comparisons.df, start.date, by="subject")
 comparisons.df <- left_join(comparisons.df, m20, by="subject")
 #date difference between parasite sample and clinical malaria column
 comparisons.df$date.diff <- as.numeric(comparisons.df$m20 - comparisons.df$clindate)
-
+#date difference between clinical malaria and start date column
+comparisons.df$date.diff.clin <- as.numeric(comparisons.df$clindate - comparisons.df$startdate)
 
 # #write comparison plot graphics to pdf 
 # pdf("C:/Users/Swu2/Documents/parasite.pdf")
