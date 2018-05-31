@@ -58,38 +58,48 @@ for(i in 1:8){
   comparisons.sera.vax[,(i+16)] <- comparisons.sera.vax[,(i+8)] - comparisons.sera.vax[,i]
 }
 
+
+#correlation function
+corr <- function(x, y){
+  corr_coef <- cor(x, y, method="spearman")
+  corr_coef <- round(corr_coef, digits=4)
+  # corr_coef <- expression(paste(rho, " = ", corr_coef))
+  # as.character(corr_coef)
+}
+
+
 ## paired plots function
-pairedPlots <- function(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, index.c, index.x, index.diff){
+pairedPlots <- function(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, index.c, index.x, index.diff, corr_coef){
   
   ## TEP placebo
       # scatterplot c vs. x
-      p1 <- ggplot(comparisons.df, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess) + geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      p1 <- ggplot(comparisons.df, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess) + geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed") + annotate("text", x=Inf, y = Inf, label = paste("\u03C1","=", corr_coef[1]), vjust=1, hjust=1)
       # dotplot and boxplot comparing c and x
-      p2 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none") + xlab("TEP Placebo")
+      p2 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1, lwd=0.85) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none") + xlab("TEP Placebo")
       # scatterplot c vs. x-c
       p3 <- ggplot(comparisons.df, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
   
   ## TEP vaccine
       # scatterplot c vs. x
-      p4 <- ggplot(comparisons.vax, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      p4 <- ggplot(comparisons.vax, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed") + annotate("text", x=Inf, y = Inf, label = paste("\u03C1","=", corr_coef[2]), vjust=1, hjust=1)
       # dotplot and boxplot comparing c and x
-      p5 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("TEP Vaccine")
+      p5 <- ggplot(melt(comparisons.vax %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1, lwd=0.85) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("TEP Vaccine")
       # scatterplot c vs. x-c
       p6 <- ggplot(comparisons.vax, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
   
   ## SERA2 placebo
       # scatterplot c vs. x
-      p7 <- ggplot(comparisons.sera, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      p7 <- ggplot(comparisons.sera, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed") + annotate("text", x=Inf, y = Inf, label = paste("\u03C1","=", corr_coef[3]), vjust=1, hjust=1)
       # dotplot and boxplot comparing c and x
-      p8 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("SERA2 Placebo")
+      p8 <- ggplot(melt(comparisons.sera %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1, lwd=0.85) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("SERA2 Placebo")
       # scatterplot c vs. x-c
       p9 <- ggplot(comparisons.sera, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
   
   ## SERA2 vaccine
       # scatterplot c vs. x
-      p10 <- ggplot(comparisons.sera.vax, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed")
+      p10 <- ggplot(comparisons.sera.vax, aes_string(x=index.c, y=index.x)) + geom_point() + stat_smooth(method = loess)+ geom_abline(intercept=0, slope=1, col="red", alpha=0.7, linetype="dashed") + annotate("text", x=Inf, y = Inf, label = paste("\u03C1","=", corr_coef[4]), vjust=1, hjust=1)
       # dotplot and boxplot comparing c and x
-      p11 <- ggplot(melt(comparisons.df %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("SERA2 Vaccine")
+      p11 <- ggplot(melt(comparisons.sera.vax %>% select(index.c, index.x)), aes(x=variable, y=value, fill=variable, col=variable)) + geom_boxplot(col="black", fill="lightblue", alpha=0.1, lwd=0.85) + geom_dotplot(binaxis='y', stackdir='center', dotsize=.4, stackratio=0.8) + theme(legend.position="none")+ xlab("SERA2 Vaccine")
       # scatterplot c vs. x-c
       p12 <- ggplot(comparisons.sera.vax, aes_string(x=index.c, y=index.diff)) + geom_point() + stat_smooth(method=loess) + ylab(paste(index.x,"-",index.c)) + geom_hline(yintercept=0, col="red", alpha=0.7, linetype="dashed")
   
@@ -99,7 +109,8 @@ pairedPlots <- function(comparisons.df, comparisons.vax, comparisons.sera, compa
 **H0: Hill number with q=0**  
 Number of haplotypes  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H0.c", "H0.x", "H0.diff")
+corr_coef <- c(corr(comparisons.df$H0.c, comparisons.df$H0.x), corr(comparisons.vax$H0.c, comparisons.vax$H0.x), corr(comparisons.sera$H0.c, comparisons.sera$H0.x), corr(comparisons.sera.vax$H0.c, comparisons.sera.vax$H0.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H0.c", "H0.x", "H0.diff", corr_coef)
 #boxplot(comparisons.sera.vax$H0.c)
 ``` 
 
@@ -107,47 +118,58 @@ pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.
 **H1: Hill number with q=1**  
 Exponential of Shannon entropy  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H1.c", "H1.x", "H1.diff")
+corr_coef <- c(corr(comparisons.df$H1.c, comparisons.df$H1.x), corr(comparisons.vax$H1.c, comparisons.vax$H1.x), corr(comparisons.sera$H1.c, comparisons.sera$H1.x), corr(comparisons.sera.vax$H1.c, comparisons.sera.vax$H1.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H1.c", "H1.x", "H1.diff", corr_coef)
 ```
 
     
 **H2: Hill number with q=2**  
 Inverse of Simpson index    
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H2.c", "H2.x", "H2.diff")
+corr_coef <- c(corr(comparisons.df$H2.c, comparisons.df$H2.x), corr(comparisons.vax$H2.c, comparisons.vax$H2.x), corr(comparisons.sera$H2.c, comparisons.sera$H2.x), corr(comparisons.sera.vax$H2.c, comparisons.sera.vax$H2.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "H2.c", "H2.x", "H2.diff", corr_coef)
 ```
   
   
+$$~$$
+$$~$$
 **CorSegSites: Corrected Segregating Sites**  
 $\frac{S}{a_1}$ where $S$ is the number of polymorphic sites and $a_1 =\sum\limits_{i=1}^{n-1}\frac{1}{i}$, with $n =$ the number of reads  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "CorSegSites.c", "CorSegSites.x", "CorSegSites.diff")
+corr_coef <- c(corr(comparisons.df$CorSegSites.c, comparisons.df$CorSegSites.x), corr(comparisons.vax$CorSegSites.c, comparisons.vax$CorSegSites.x), corr(comparisons.sera$CorSegSites.c, comparisons.sera$CorSegSites.x), corr(comparisons.sera.vax$CorSegSites.c, comparisons.sera.vax$CorSegSites.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "CorSegSites.c", "CorSegSites.x", "CorSegSites.diff", corr_coef)
 ```
   
-    
+  
+$$~$$    
 **PiWt: AA diversity, $\pi$, weighted by haplotype frequency**  
 Average Hamming distance between any two haplotypes, taking haplotype frequency into consideration  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "PiWt.c", "PiWt.x", "PiWt.diff")
+corr_coef <- c(corr(comparisons.df$PiWt.c, comparisons.df$PiWt.x), corr(comparisons.vax$PiWt.c, comparisons.vax$PiWt.x), corr(comparisons.sera$PiWt.c, comparisons.sera$PiWt.x), corr(comparisons.sera.vax$PiWt.c, comparisons.sera.vax$PiWt.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "PiWt.c", "PiWt.x", "PiWt.diff", corr_coef)
 ```
   
     
 **PiEq: AA diversity, $\pi$, haplotypes weighted equally**  
 Average Hamming distance between any two haplotypes  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "PiEq.c", "PiEq.x", "PiEq.diff")
+corr_coef <- c(corr(comparisons.df$PiEq.c, comparisons.df$PiEq.x), corr(comparisons.vax$PiEq.c, comparisons.vax$PiEq.x), corr(comparisons.sera$PiEq.c, comparisons.sera$PiEq.x), corr(comparisons.sera.vax$PiEq.c, comparisons.sera.vax$PiEq.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "PiEq.c", "PiEq.x", "PiEq.diff", corr_coef)
 ```
   
-    
+$$~$$
+$$~$$
 **HamWt: Hamming distance, weighted by haplotype frequency**  
 Average Hamming distance from 3D7 vaccine strain, taking haplotype frequency into consideration  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "HamWt.c", "HamWt.x", "HamWt.diff")
+corr_coef <- c(corr(comparisons.df$HamWt.c, comparisons.df$HamWt.x), corr(comparisons.vax$HamWt.c, comparisons.vax$HamWt.x), corr(comparisons.sera$HamWt.c, comparisons.sera$HamWt.x), corr(comparisons.sera.vax$HamWt.c, comparisons.sera.vax$HamWt.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "HamWt.c", "HamWt.x", "HamWt.diff", corr_coef)
 ```
   
     
 **HamEq: Hamming distance, haplotypes weighted equally**  
 Average Hamming distance from 3D7 vaccine strain  
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "HamEq.c", "HamEq.x", "HamEq.diff")
+corr_coef <- c(corr(comparisons.df$HamEq.c, comparisons.df$HamEq.x), corr(comparisons.vax$HamEq.c, comparisons.vax$HamEq.x), corr(comparisons.sera$HamEq.c, comparisons.sera$HamEq.x), corr(comparisons.sera.vax$HamEq.c, comparisons.sera.vax$HamEq.x))
+pairedPlots(comparisons.df, comparisons.vax, comparisons.sera, comparisons.sera.vax, "HamEq.c", "HamEq.x", "HamEq.diff", corr_coef)
 ```
